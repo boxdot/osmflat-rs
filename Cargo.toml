@@ -1,0 +1,18 @@
+[package]
+name = "osm-flatdata"
+version = "0.1.0"
+authors = ["boxdot <d@zerovolt.org>"]
+
+[dependencies]
+bytes = "*"
+docopt = "1.0"
+flatdata = "0.1"
+prost = "*"
+prost-derive = "*"
+prost-types = "*"
+serde = "1.0"
+serde_derive = "1.0"
+byteorder = "*"
+
+[build-dependencies]
+prost-build = "*"
