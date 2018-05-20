@@ -4,7 +4,7 @@ const USAGE: &'static str = "
 Compiler from osm.pbf format to osm.flatdata format.
 
 Usage:
-  osmpbf2flatdata <input> <output>
+  osm-flatdata <input> <output>
 ";
 
 #[derive(Debug, Deserialize)]
