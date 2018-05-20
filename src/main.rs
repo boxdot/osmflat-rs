@@ -44,7 +44,7 @@ struct OsmPbfIterator {
 }
 
 impl OsmPbfIterator {
-    fn new<P: AsRef<Path>>(path: P) -> Result<OsmPbfIterator, Error> {
+    pub fn new<P: AsRef<Path>>(path: P) -> Result<OsmPbfIterator, Error> {
         let file = File::open(path)?;
         Ok(OsmPbfIterator {
             reader: BufReader::new(file),
@@ -119,24 +119,111 @@ impl Iterator for OsmPbfIterator {
     }
 }
 
+fn serialize_header(
+    header_block: &osmpbf::HeaderBlock,
+    builder: &mut osmflat::OsmBuilder,
+    stringtable: &mut Vec<u8>,
+) -> Result<(), io::Error> {
+    let mut header = flatdata::StructBuf::<osmflat::Header>::new();
+
+    if let Some(ref bbox) = header_block.bbox {
+        header.set_bbox_left(bbox.left);
+        header.set_bbox_right(bbox.right);
+        header.set_bbox_top(bbox.top);
+        header.set_bbox_bottom(bbox.bottom);
+    };
+
+    header.set_required_feature_first_idx(stringtable.len() as u32);
+    header.set_required_features_size(header_block.required_features.len() as u32);
+    for feature in &header_block.required_features {
+        stringtable.extend(feature.as_bytes());
+        stringtable.push(b'\0');
+    }
+
+    header.set_optional_feature_first_idx(stringtable.len() as u32);
+    header.set_optional_features_size(header_block.optional_features.len() as u32);
+    for feature in &header_block.optional_features {
+        stringtable.extend(feature.as_bytes());
+        stringtable.push(b'\0');
+    }
+
+    if let Some(ref writingprogram) = header_block.writingprogram {
+        // TODO: Should we also add our name here?
+        header.set_writingprogram_idx(stringtable.len() as u32);
+        stringtable.extend(writingprogram.as_bytes());
+        stringtable.push(b'\0');
+    }
+
+    if let Some(ref source) = header_block.source {
+        header.set_source_idx(stringtable.len() as u32);
+        stringtable.extend(source.as_bytes());
+        stringtable.push(b'\0');
+    }
+
+    if let Some(timestamp) = header_block.osmosis_replication_timestamp {
+        header.set_osmosis_replication_timestamp(timestamp);
+    }
+
+    if let Some(number) = header_block.osmosis_replication_sequence_number {
+        header.set_osmosis_replication_sequence_number(number);
+    }
+
+    if let Some(ref url) = header_block.osmosis_replication_base_url {
+        header.set_osmosis_replication_base_url_idx(stringtable.len() as u32);
+        stringtable.extend(url.as_bytes());
+        stringtable.push(b'\0');
+    }
+
+    Ok(builder.set_header(&header)?)
+}
+
 fn run() -> Result<(), Error> {
     let args = parse_args();
 
     let pbf_iter = OsmPbfIterator::new(args.arg_input)?;
-    for block in pbf_iter {
-        let block = block?;
-        match block {
-            OsmPbfBlock::OsmHeader(header) => println!("{:?}", header),
-            OsmPbfBlock::OsmData(data) => println!("{}", data.stringtable.s.len()),
-        }
-    }
-
     let storage = Rc::new(RefCell::new(FileResourceStorage::new(
         args.arg_output.into(),
     )));
-    let _builder = osmflat::OsmBuilder::new(storage);
+    let mut builder = osmflat::OsmBuilder::new(storage)?;
 
-    Ok(())
+    // fill in dummy data for now
+    {
+        let mut nodes = builder.start_nodes()?;
+        nodes.close()?;
+
+        let mut ways = builder.start_ways()?;
+        ways.close()?;
+
+        let mut relations = builder.start_relations()?;
+        relations.close()?;
+
+        let mut relation_members = builder.start_relation_members()?;
+        relation_members.close()?;
+
+        let mut tags = builder.start_tags()?;
+        tags.close()?;
+
+        let mut infos = builder.start_infos()?;
+        infos.close()?;
+    }
+
+    // TODO: Would be nice not store all these strings in memory, but to flush them
+    // from time to time to disk.
+    let mut stringtable = Vec::new();
+    stringtable.push(b'\0');
+
+    for block in pbf_iter {
+        let block = block?;
+        match block {
+            OsmPbfBlock::OsmHeader(header) => {
+                serialize_header(&header, &mut builder, &mut stringtable)?;
+            }
+            OsmPbfBlock::OsmData(data) => println!("data {}", data.stringtable.s.len()),
+        }
+    }
+
+    stringtable.push(b'\0'); // add sentinel
+    Ok(builder.set_stringtable(&stringtable)?)
 }
 
 fn main() {
