@@ -36,6 +36,28 @@ enum OsmPbfBlock {
     OsmData(osmpbf::PrimitiveBlock),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum OsmGroupType {
+    Nodes,
+    DenseNodes,
+    Ways,
+    Relations,
+}
+
+fn get_group_type(group: &osmpbf::PrimitiveGroup) -> OsmGroupType {
+    if !group.nodes.is_empty() {
+        OsmGroupType::Nodes
+    } else if group.dense.is_some() {
+        OsmGroupType::DenseNodes
+    } else if !group.ways.is_empty() {
+        OsmGroupType::Ways
+    } else if !group.relations.is_empty() {
+        OsmGroupType::Relations
+    } else {
+        panic!("not supported group type")
+    }
+}
+
 struct OsmPbfIterator {
     reader: BufReader<File>,
     file_buf: Vec<u8>,
@@ -177,53 +199,130 @@ fn serialize_header(
     Ok(builder.set_header(&header)?)
 }
 
+fn serialize_datablock(
+    block: &osmpbf::PrimitiveBlock,
+    builder: &mut osmflat::OsmBuilder,
+    nodes: &mut flatdata::ExternalVector<osmflat::Node>,
+    tags: &mut flatdata::ExternalVector<osmflat::Tag>,
+    stringtable: &mut Vec<u8>,
+) -> Result<(), io::Error> {
+    assert_eq!(block.primitivegroup.len(), 1);
+    let group_type = get_group_type(&block.primitivegroup[0]);
+    if group_type == OsmGroupType::DenseNodes {
+        serialize_dense_nodes(block, builder, nodes, tags, stringtable)
+    } else {
+        Ok(println!(
+            "Serialization for {:?} is not yet implemented",
+            group_type
+        ))
+    }
+}
+
+fn serialize_dense_nodes(
+    block: &osmpbf::PrimitiveBlock,
+    _builder: &mut osmflat::OsmBuilder,
+    nodes: &mut flatdata::ExternalVector<osmflat::Node>,
+    tags: &mut flatdata::ExternalVector<osmflat::Tag>,
+    stringtable: &mut Vec<u8>,
+) -> Result<(), io::Error> {
+    let group = &block.primitivegroup[0];
+    let dense_nodes = group.dense.as_ref().unwrap();
+
+    let granularity = block.granularity.unwrap_or(100);
+    let lat_offset = block.lat_offset.unwrap_or(0);
+    let lon_offset = block.lon_offset.unwrap_or(0);
+    let mut lat = 0;
+    let mut lon = 0;
+
+    let mut tags_offset = 0;
+
+    for i in 0..dense_nodes.id.len() {
+        let mut node = nodes.grow()?;
+        node.set_id(dense_nodes.id[i]);
+
+        lat += dense_nodes.lat[i];
+        lon += dense_nodes.lon[i];
+        node.set_lat(lat_offset + (granularity as i64 * lat));
+        node.set_lon(lon_offset + (granularity as i64 * lon));
+
+        if tags_offset < dense_nodes.keys_vals.len() {
+            node.set_tag_first_idx(tags.len() as u32);
+            loop {
+                let k = dense_nodes.keys_vals[tags_offset];
+                if k == 0 {
+                    break; // separator
+                }
+                let v = dense_nodes.keys_vals[tags_offset + 1];
+                tags_offset += 2;
+
+                let mut tag = tags.grow()?;
+                tag.set_key_idx(stringtable.len() as u32);
+                tag.set_value_idx(stringtable.len() as u32);
+
+                stringtable.extend(&block.stringtable.s[k as usize]);
+                stringtable.push(b'\0');
+                stringtable.extend(&block.stringtable.s[v as usize]);
+                stringtable.push(b'\0');
+            }
+        }
+    }
+    Ok(())
+}
+
 fn run() -> Result<(), Error> {
     let args = parse_args();
 
-    let pbf_iter = OsmPbfIterator::new(args.arg_input)?;
     let storage = Rc::new(RefCell::new(FileResourceStorage::new(
         args.arg_output.into(),
     )));
     let mut builder = osmflat::OsmBuilder::new(storage)?;
 
     // fill in dummy data for now
-    {
-        let mut nodes = builder.start_nodes()?;
-        nodes.close()?;
-
-        let mut ways = builder.start_ways()?;
-        ways.close()?;
-
-        let mut relations = builder.start_relations()?;
-        relations.close()?;
-
-        let mut relation_members = builder.start_relation_members()?;
-        relation_members.close()?;
-
-        let mut tags = builder.start_tags()?;
-        tags.close()?;
-
-        let mut infos = builder.start_infos()?;
-        infos.close()?;
-    }
+    let mut nodes = builder.start_nodes()?;
+    let mut ways = builder.start_ways()?;
+    let mut relations = builder.start_relations()?;
+    let mut relation_members = builder.start_relation_members()?;
+    let mut tags = builder.start_tags()?;
+    let mut infos = builder.start_infos()?;
 
     // TODO: Would be nice not store all these strings in memory, but to flush them
     // from time to time to disk.
     let mut stringtable = Vec::new();
     stringtable.push(b'\0');
 
-    for block in pbf_iter {
+    // TODO: For now we make two cvery rude assumptions that:
+    //
+    // * the blocks are written in the order: Header, Nodes, Ways, Relations;
+    // * every primitivegroup contains a single element in a block.
+    for block in OsmPbfIterator::new(args.arg_input.clone())? {
         let block = block?;
         match block {
             OsmPbfBlock::OsmHeader(header) => {
                 serialize_header(&header, &mut builder, &mut stringtable)?;
             }
-            OsmPbfBlock::OsmData(data) => println!("data {}", data.stringtable.s.len()),
+            OsmPbfBlock::OsmData(block) => {
+                serialize_datablock(
+                    &block,
+                    &mut builder,
+                    &mut nodes,
+                    &mut tags,
+                    &mut stringtable,
+                )?;
+            }
         }
     }
 
     stringtable.push(b'\0'); // add sentinel
-    Ok(builder.set_stringtable(&stringtable)?)
+    builder.set_stringtable(&stringtable)?;
+
+    nodes.close()?;
+    ways.close()?;
+    relations.close()?;
+    relation_members.close()?;
+    tags.close()?;
+    infos.close()?;
+
+    Ok(())
 }
 
 fn main() {
