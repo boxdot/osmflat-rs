@@ -1,0 +1,105 @@
+namespace osm {
+
+const u32 INVALID_IDX = 0;
+
+struct Header {
+    bbox_left: i64 : 64;
+    bbox_right: i64 : 64;
+    bbox_top: i64 : 64;
+    bbox_bottom: i64 : 64;
+
+    required_feature_first_idx: u32 : 32;
+    required_features_size: u32 : 4;
+    optional_feature_first_idx: u32 : 32;
+    optional_features_size: u32 : 4;
+
+    writingprogram_idx: u32 : 32;
+    source_idx: u32 : 32;
+
+    osmosis_replication_timestamp: i64 : 64;
+    osmosis_replication_sequence_number: i64 : 64;
+    osmosis_replication_base_url_idx: u32 : 32;
+}
+
+struct Info {
+    version: i32 : 32;
+    timestamp: i64 : 64;
+    changest: i64 : 64;
+    uid: i32 : 32;
+    user_idx: u32 : 32;
+    visible: bool : 1;
+}
+
+struct Tag {
+    key_idx: u32 : 32;
+    value_idx: u32 : 32;
+}
+
+struct Node {
+    id: i64 : 64;
+    lat: i64 : 64;
+    lon: i64 : 64;
+    tag_first_idx: u32 : 32;
+    info_idx: u32 : 32;
+}
+
+struct Way {
+    id: i64 : 64;
+    tag_first_idx: u32 : 32;
+    ref_first_idx: u32 : 32;
+    info_idx: u32 : 32;
+}
+
+const u8 MEMBER_TYPE_NODE = 0;
+const u8 MEMBER_TYPE_WAY = 1;
+const u8 MEMBER_TYPE_RELATION = 2;
+
+struct RelationMember {
+    role_idx: u32 : 32;
+    memid: u32 : 32;
+    // populated by MEMBER_TYPE_* constants
+    type: u32 : 2;
+}
+
+struct Relation {
+    id: i64 : 64;
+    tag_first_idx: u32 : 32;
+    relation_member_first_idx: u32 : 32;
+    info_idx: u32 : 32;
+}
+
+archive Osm {
+    @explicit_reference( Header.required_feature_first_idx, stringtable )
+    @explicit_reference( Header.optional_feature_first_idx, stringtable )
+    @explicit_reference( Header.writingprogram_idx, stringtable )
+    @explicit_reference( Header.source_idx, stringtable )
+    @explicit_reference( Header.osmosis_replication_base_url_idx, stringtable )
+    header: Header;
+
+    @explicit_reference( Node.tag_first_idx, tags )
+    @explicit_reference( Node.info_idx, infos )
+    nodes: vector<Node>;
+
+    @explicit_reference( Way.tag_first_idx, tags )
+    @explicit_reference( Way.info_idx, infos )
+    ways: vector<Way>;
+
+    @explicit_reference( Relation.tag_first_idx, tags )
+    @explicit_reference( Relation.relation_member_first_idx, relation_members )
+    @explicit_reference( Relation.info_idx, infos )
+    relations: vector<Relation>;
+    relation_members: vector<RelationMember>;
+
+    @explicit_reference( Tag.key_idx, stringtable )
+    @explicit_reference( Tag.value_idx, stringtable )
+    tags: vector<Tag>;
+
+    @explicit_reference( Info.user_idx, stringtable )
+    infos: vector<Info>;
+
+    /**
+     * List of strings separated by \0.
+     */
+    stringtable: raw_data;
+}
+} // namespace osm
