@@ -34,25 +34,28 @@ use std::io::{self, BufReader, ErrorKind, Read};
 use std::path::Path;
 use std::rc::Rc;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum OsmGroupType {
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum BlockType {
+    Header,
     Nodes,
     DenseNodes,
     Ways,
     Relations,
 }
 
-fn get_group_type(group: &osmpbf::PrimitiveGroup) -> OsmGroupType {
-    if !group.nodes.is_empty() {
-        OsmGroupType::Nodes
-    } else if group.dense.is_some() {
-        OsmGroupType::DenseNodes
-    } else if !group.ways.is_empty() {
-        OsmGroupType::Ways
-    } else if !group.relations.is_empty() {
-        OsmGroupType::Relations
-    } else {
-        panic!("not supported group type")
+impl BlockType {
+    fn from_primitive_group(group: &osmpbf::PrimitiveGroup) -> Self {
+        if !group.nodes.is_empty() {
+            BlockType::Nodes
+        } else if group.dense.is_some() {
+            BlockType::DenseNodes
+        } else if !group.ways.is_empty() {
+            BlockType::Ways
+        } else if !group.relations.is_empty() {
+            BlockType::Relations
+        } else {
+            panic!("not supported group type")
+        }
     }
 }
 
@@ -139,15 +142,8 @@ impl OsmBlockIndexIterator {
             // TODO: Avoid decoding the full block. We need just the type of the primitive
             // group.
             let data = osmpbf::PrimitiveBlock::decode(blob_data)?;
-
             assert_eq!(data.primitivegroup.len(), 1);
-            let group_type = get_group_type(&data.primitivegroup[0]);
-            match group_type {
-                OsmGroupType::Nodes => BlockType::Nodes,
-                OsmGroupType::DenseNodes => BlockType::DenseNodes,
-                OsmGroupType::Ways => BlockType::Ways,
-                OsmGroupType::Relations => BlockType::Relations,
-            }
+            BlockType::from_primitive_group(&data.primitivegroup[0])
         } else {
             panic!("unknown blob type");
         };
@@ -317,15 +313,6 @@ fn serialize_dense_nodes(
         }
     }
     Ok(())
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-enum BlockType {
-    Header,
-    Nodes,
-    DenseNodes,
-    Ways,
-    Relations,
 }
 
 /// Reads the pbf file at the given path and builds an index of block types.
