@@ -16,6 +16,7 @@ byteorder = "*"
 flate2 = "1.0"
 failure = "*"
 colored = "1.6"
+itertools = "*"
 
 [build-dependencies]
 prost-build = "*"

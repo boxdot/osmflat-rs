@@ -1,10 +1,12 @@
 extern crate byteorder;
 extern crate colored;
 extern crate docopt;
+#[macro_use]
 extern crate failure;
 extern crate flate2;
 #[macro_use]
 extern crate flatdata;
+extern crate itertools;
 extern crate prost;
 #[macro_use]
 extern crate prost_derive;
@@ -16,12 +18,14 @@ mod osmflat;
 mod osmpbf;
 
 use args::parse_args;
+use std::io::Seek;
 
 use byteorder::{ByteOrder, NetworkEndian};
 use colored::*;
 use failure::Error;
 use flatdata::{ArchiveBuilder, FileResourceStorage};
 use flate2::read::ZlibDecoder;
+use itertools::Itertools;
 use prost::Message;
 
 use std::cell::RefCell;
@@ -29,12 +33,6 @@ use std::fs::File;
 use std::io::{self, BufReader, ErrorKind, Read};
 use std::path::Path;
 use std::rc::Rc;
-
-#[derive(Debug, Clone)]
-enum OsmPbfBlock {
-    OsmHeader(osmpbf::HeaderBlock),
-    OsmData(osmpbf::PrimitiveBlock),
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum OsmGroupType {
@@ -58,44 +56,69 @@ fn get_group_type(group: &osmpbf::PrimitiveGroup) -> OsmGroupType {
     }
 }
 
-struct OsmPbfIterator {
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
+enum BlockCompression {
+    Uncompressed,
+    Zlib,
+}
+
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
+struct BlockIndex {
+    block_type: BlockType,
+    blob_start: usize,
+    blob_len: usize,
+    compression: BlockCompression,
+}
+
+struct OsmBlockIndexIterator {
     reader: BufReader<File>,
+    cursor: usize,
     file_buf: Vec<u8>,
     blob_buf: Vec<u8>,
     is_open: bool,
 }
 
-impl OsmPbfIterator {
-    pub fn new<P: AsRef<Path>>(path: P) -> Result<OsmPbfIterator, Error> {
+impl OsmBlockIndexIterator {
+    pub fn new<P: AsRef<Path>>(path: P) -> Result<Self, Error> {
         let file = File::open(path)?;
-        Ok(OsmPbfIterator {
+        Ok(Self {
             reader: BufReader::new(file),
+            cursor: 0,
             file_buf: Vec::new(),
             blob_buf: Vec::new(),
             is_open: true,
         })
     }
 
-    fn read_next(&mut self) -> Result<OsmPbfBlock, io::Error> {
+    fn read_next(&mut self) -> Result<BlockIndex, io::Error> {
         // read size of blob header
+        self.cursor += 4;
         self.file_buf.resize(4, 0);
         self.reader.read_exact(&mut self.file_buf)?;
         let blob_header_len: i32 = NetworkEndian::read_i32(&self.file_buf);
 
         // read blob header
+        self.cursor += blob_header_len as usize;
         self.file_buf.resize(blob_header_len as usize, 0);
         self.reader.read_exact(&mut self.file_buf)?;
         let blob_header = osmpbf::BlobHeader::decode(&self.file_buf)?;
 
+        let blob_start = self.cursor;
+        let blob_len = blob_header.datasize as usize;
+
         // read blob
+        self.cursor += blob_header.datasize as usize;
         self.file_buf.resize(blob_header.datasize as usize, 0);
         self.reader.read_exact(&mut self.file_buf)?;
         let blob = osmpbf::Blob::decode(&self.file_buf)?;
 
+        let compression;
         let blob_data = if blob.raw.is_some() {
+            compression = BlockCompression::Uncompressed;
             // use raw bytes
             blob.raw.as_ref().unwrap()
         } else if blob.zlib_data.is_some() {
+            compression = BlockCompression::Zlib;
             // decompress zlib data
             self.blob_buf.clear();
             let data: &Vec<u8> = blob.zlib_data.as_ref().unwrap();
@@ -110,18 +133,64 @@ impl OsmPbfIterator {
             blob.raw_size.unwrap_or_else(|| blob_data.len() as i32) as usize
         );
 
-        Ok(if blob_header.type_ == "OSMHeader" {
-            OsmPbfBlock::OsmHeader(osmpbf::HeaderBlock::decode(blob_data)?)
+        let block_type = if blob_header.type_ == "OSMHeader" {
+            BlockType::Header
         } else if blob_header.type_ == "OSMData" {
-            OsmPbfBlock::OsmData(osmpbf::PrimitiveBlock::decode(blob_data)?)
+            // TODO: Avoid decoding the full block. We need just the type of the primitive
+            // group.
+            let data = osmpbf::PrimitiveBlock::decode(blob_data)?;
+
+            assert_eq!(data.primitivegroup.len(), 1);
+            let group_type = get_group_type(&data.primitivegroup[0]);
+            match group_type {
+                OsmGroupType::Nodes => BlockType::Nodes,
+                OsmGroupType::DenseNodes => BlockType::DenseNodes,
+                OsmGroupType::Ways => BlockType::Ways,
+                OsmGroupType::Relations => BlockType::Relations,
+            }
         } else {
             panic!("unknown blob type");
+        };
+
+        Ok(BlockIndex {
+            block_type,
+            compression,
+            blob_start,
+            blob_len,
         })
     }
 }
 
-impl Iterator for OsmPbfIterator {
-    type Item = Result<OsmPbfBlock, io::Error>;
+fn read_block<F: Read + Seek, T: prost::Message + Default>(
+    reader: &mut F,
+    idx: &BlockIndex,
+) -> Result<T, Error> {
+    reader.seek(io::SeekFrom::Start(idx.blob_start as u64))?;
+
+    // TODO: allocate buffers outside
+    let mut buf = Vec::new();
+    buf.resize(idx.blob_len, 0);
+    reader.read_exact(&mut buf)?;
+    let blob = osmpbf::Blob::decode(&buf)?;
+
+    let mut blob_buf = Vec::new();
+    let blob_data = match idx.compression {
+        BlockCompression::Uncompressed => blob.raw.as_ref().unwrap(),
+        BlockCompression::Zlib => {
+            // decompress zlib data
+            blob_buf.clear();
+            let data: &Vec<u8> = blob.zlib_data.as_ref().unwrap();
+            let mut decoder = ZlibDecoder::new(&data[..]);
+            decoder.read_to_end(&mut blob_buf)?;
+            &blob_buf
+        }
+    };
+
+    Ok(T::decode(blob_data)?)
+}
+
+impl Iterator for OsmBlockIndexIterator {
+    type Item = Result<BlockIndex, io::Error>;
     fn next(&mut self) -> Option<Self::Item> {
         if self.is_open {
             let next = self.read_next();
@@ -196,31 +265,12 @@ fn serialize_header(
         stringtable.push(b'\0');
     }
 
-    Ok(builder.set_header(&header)?)
-}
-
-fn serialize_datablock(
-    block: &osmpbf::PrimitiveBlock,
-    builder: &mut osmflat::OsmBuilder,
-    nodes: &mut flatdata::ExternalVector<osmflat::Node>,
-    tags: &mut flatdata::ExternalVector<osmflat::Tag>,
-    stringtable: &mut Vec<u8>,
-) -> Result<(), io::Error> {
-    assert_eq!(block.primitivegroup.len(), 1);
-    let group_type = get_group_type(&block.primitivegroup[0]);
-    if group_type == OsmGroupType::DenseNodes {
-        serialize_dense_nodes(block, builder, nodes, tags, stringtable)
-    } else {
-        Ok(println!(
-            "Serialization for {:?} is not yet implemented",
-            group_type
-        ))
-    }
+    builder.set_header(&header)?;
+    Ok(())
 }
 
 fn serialize_dense_nodes(
     block: &osmpbf::PrimitiveBlock,
-    _builder: &mut osmflat::OsmBuilder,
     nodes: &mut flatdata::ExternalVector<osmflat::Node>,
     tags: &mut flatdata::ExternalVector<osmflat::Tag>,
     stringtable: &mut Vec<u8>,
@@ -242,8 +292,8 @@ fn serialize_dense_nodes(
 
         lat += dense_nodes.lat[i];
         lon += dense_nodes.lon[i];
-        node.set_lat(lat_offset + (granularity as i64 * lat));
-        node.set_lon(lon_offset + (granularity as i64 * lon));
+        node.set_lat(lat_offset + (i64::from(granularity) * lat));
+        node.set_lon(lon_offset + (i64::from(granularity) * lon));
 
         if tags_offset < dense_nodes.keys_vals.len() {
             node.set_tag_first_idx(tags.len() as u32);
@@ -269,11 +319,38 @@ fn serialize_dense_nodes(
     Ok(())
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum BlockType {
+    Header,
+    Nodes,
+    DenseNodes,
+    Ways,
+    Relations,
+}
+
+/// Reads the pbf file at the given path and builds an index of block types.
+///
+/// The index is sorted lexicographically by block type and position in the pbf
+/// file.
+fn build_block_index<P: AsRef<Path>>(path: P) -> Result<Vec<BlockIndex>, Error> {
+    let mut index: Vec<_> = OsmBlockIndexIterator::new(path)?
+        .filter_map(|block| match block {
+            Ok(b) => Some(b),
+            Err(e) => {
+                eprintln!("Skipping block due to error: {}", e);
+                None
+            }
+        })
+        .collect();
+    index.sort();
+    Ok(index)
+}
+
 fn run() -> Result<(), Error> {
     let args = parse_args();
 
     let storage = Rc::new(RefCell::new(FileResourceStorage::new(
-        args.arg_output.into(),
+        args.arg_output.clone().into(),
     )));
     let mut builder = osmflat::OsmBuilder::new(storage)?;
 
@@ -290,28 +367,61 @@ fn run() -> Result<(), Error> {
     let mut stringtable = Vec::new();
     stringtable.push(b'\0');
 
-    // TODO: For now we make two cvery rude assumptions that:
-    //
-    // * the blocks are written in the order: Header, Nodes, Ways, Relations;
-    // * every primitivegroup contains a single element in a block.
-    for block in OsmPbfIterator::new(args.arg_input.clone())? {
-        let block = block?;
-        match block {
-            OsmPbfBlock::OsmHeader(header) => {
-                serialize_header(&header, &mut builder, &mut stringtable)?;
-            }
-            OsmPbfBlock::OsmData(block) => {
-                serialize_datablock(
-                    &block,
-                    &mut builder,
-                    &mut nodes,
-                    &mut tags,
-                    &mut stringtable,
-                )?;
-            }
+    let block_index = build_block_index(args.arg_input.clone())?;
+
+    // TODO: move out into a function
+    let groups = block_index.into_iter().group_by(|b| b.block_type);
+    let mut pbf_header = None;
+    let mut pbf_nodes = None;
+    let mut pbf_dense_nodes = None;
+    let mut pbf_ways = None;
+    let mut pbf_relations = None;
+    for (block_type, blocks) in &groups {
+        match block_type {
+            BlockType::Header => pbf_header = Some(blocks),
+            BlockType::Nodes => pbf_nodes = Some(blocks),
+            BlockType::DenseNodes => pbf_dense_nodes = Some(blocks),
+            BlockType::Ways => pbf_ways = Some(blocks),
+            BlockType::Relations => pbf_relations = Some(blocks),
         }
     }
 
+    let mut file = File::open(args.arg_input)?;
+
+    // Serialize header
+    let mut index = pbf_header.ok_or_else(|| format_err!("missing header block"))?;
+    let idx = index.next();
+    let pbf_header: osmpbf::HeaderBlock = read_block(&mut file, &idx.unwrap())?;
+    serialize_header(&pbf_header, &mut builder, &mut stringtable)?;
+    ensure!(
+        index.next().is_none(),
+        "found multiple header blocks, which is not supported."
+    );
+
+    // Serialize nodes
+    ensure!(
+        pbf_nodes.is_none(),
+        format_err!("found nodes, only dense nodes are supported now")
+    );
+
+    // Serialize dense nodes
+    let index = pbf_dense_nodes.ok_or_else(|| format_err!("missing dense nodes"))?;
+    for idx in index {
+        let block: osmpbf::PrimitiveBlock = read_block(&mut file, &idx)?;
+        serialize_dense_nodes(&block, &mut nodes, &mut tags, &mut stringtable)?;
+    }
+
+    // Serialize ways
+    if let Some(_pbf_ways) = pbf_ways {
+        println!("found ways => skipping since not implemented yet");
+    }
+
+    // Serialize ways
+    if let Some(_pbf_relations) = pbf_relations {
+        println!("found relations => skipping since not implemented yet");
+    }
+
+    // Finalize data structures
     stringtable.push(b'\0'); // add sentinel
     builder.set_stringtable(&stringtable)?;
 
@@ -321,6 +431,16 @@ fn run() -> Result<(), Error> {
     relation_members.close()?;
     tags.close()?;
     infos.close()?;
+
+    println!(
+        r#"Serialized:
+  nodes: {},
+  ways: {},
+  relations: {}"#,
+        nodes.len(),
+        ways.len(),
+        relations.len()
+    );
 
     Ok(())
 }
