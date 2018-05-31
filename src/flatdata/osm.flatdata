@@ -60,9 +60,9 @@ const u8 MEMBER_TYPE_RELATION = 2;
 
 struct RelationMember {
     role_idx: u32 : 32;
-    memid: u32 : 32;
+    mem_idx: u32 : 32;
     // populated by MEMBER_TYPE_* constants
-    type: u32 : 2;
+    type: u8 : 2;
 }
 
 struct Relation {
@@ -93,6 +93,8 @@ archive Osm {
     @explicit_reference( Relation.relation_member_first_idx, relation_members )
     @explicit_reference( Relation.info_idx, infos )
     relations: vector<Relation>;
+
+    @explicit_reference( RelationMember.role_idx, stringtable )
     relation_members: vector<RelationMember>;
 
     @explicit_reference( Tag.key_idx, stringtable )

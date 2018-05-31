@@ -364,6 +364,88 @@ fn serialize_ways(
     Ok(())
 }
 
+fn serialize_relations(
+    block: &osmpbf::PrimitiveBlock,
+    nodes_id_to_idx: &HashMap<i64, u32>,
+    ways_id_to_idx: &HashMap<i64, u32>,
+    relations: &mut flatdata::ExternalVector<osmflat::Relation>,
+    relation_members: &mut flatdata::ExternalVector<osmflat::RelationMember>,
+    tags: &mut flatdata::ExternalVector<osmflat::Tag>,
+    stringtable: &mut Vec<u8>,
+) -> Result<(), io::Error> {
+    for group in block.primitivegroup.iter() {
+        for pbf_relation in group.relations.iter() {
+            let mut relation = relations.grow()?;
+            relation.set_id(pbf_relation.id);
+
+            debug_assert_eq!(
+                pbf_relation.keys.len(),
+                pbf_relation.vals.len(),
+                "invalid input data"
+            );
+            relation.set_tag_first_idx(tags.len() as u32);
+            for i in 0..pbf_relation.keys.len() {
+                let mut tag = tags.grow()?;
+                tag.set_key_idx(stringtable.len() as u32);
+                stringtable.extend(&block.stringtable.s[pbf_relation.keys[i] as usize]);
+                stringtable.push(b'\0');
+                tag.set_value_idx(stringtable.len() as u32);
+                stringtable.extend(&block.stringtable.s[pbf_relation.vals[i] as usize]);
+                stringtable.push(b'\0');
+            }
+
+            // TODO: Serialized infos
+
+            debug_assert!(
+                pbf_relation.roles_sid.len() == pbf_relation.memids.len() &&
+                pbf_relation.memids.len() == pbf_relation.types.len()
+                "invalid input data"
+            );
+
+            relation.set_relation_member_first_idx(relation_members.len() as u32);
+
+            let mut memid = 0;
+            for i in 0..pbf_relation.roles_sid.len() {
+                memid += pbf_relation.memids[i];
+
+                let member_type = osmpbf::relation::MemberType::from_i32(pbf_relation.types[i]);
+                debug_assert!(member_type.is_some());
+
+                let (mem_idx, mem_type) = match member_type.unwrap() {
+                    osmpbf::relation::MemberType::Node => {
+                        if let Some(&idx) = nodes_id_to_idx.get(&memid) {
+                            (idx, osmflat::MEMBER_TYPE_NODE)
+                        } else {
+                            eprintln!("Skipping relation containing unresolved node {}", memid);
+                            continue;
+                        }
+                    }
+                    osmpbf::relation::MemberType::Way => {
+                        if let Some(&idx) = ways_id_to_idx.get(&memid) {
+                            (idx, osmflat::MEMBER_TYPE_WAY)
+                        } else {
+                            eprintln!("Skipping relation containing unresolved way {}", memid);
+                            continue;
+                        }
+                    }
+                    osmpbf::relation::MemberType::Relation => {
+                        eprintln!("Skipping relation containing relations => not implemented");
+                        continue;
+                    }
+                };
+
+                let mut member = relation_members.grow()?;
+                member.set_mem_idx(mem_idx);
+                member.set_type(mem_type);
+                member.set_role_idx(stringtable.len() as u32);
+                stringtable.extend(&block.stringtable.s[pbf_relation.roles_sid[i] as usize]);
+                stringtable.push(b'\0');
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Reads the pbf file at the given path and builds an index of block types.
 ///
 /// The index is sorted lexicographically by block type and position in the pbf
@@ -391,8 +473,6 @@ fn run() -> Result<(), Error> {
     let mut builder = osmflat::OsmBuilder::new(storage.clone())?;
 
     // fill in dummy data for now
-    let mut relations = builder.start_relations()?;
-    let mut relation_members = builder.start_relation_members()?;
     let mut tags = builder.start_tags()?;
     let mut infos = builder.start_infos()?;
     let mut nodes_index = builder.start_nodes_index()?;
@@ -459,7 +539,7 @@ fn run() -> Result<(), Error> {
     let resource = storage
         .borrow_mut()
         .read_and_check_schema("nodes", osmflat::schema::resources::osm::NODES)
-        .expect("failed to read vector resource");
+        .expect("failed to read nodes");
     let nodes_view: ArrayView<osmflat::Node> = ArrayView::new(&resource);
     let mut nodes_id_to_idx: HashMap<i64, u32> = HashMap::new();
     nodes_id_to_idx.reserve(nodes_view.len());
@@ -492,17 +572,47 @@ fn run() -> Result<(), Error> {
         0
     };
 
-    // Serialize ways
-    if let Some(_pbf_relations) = pbf_relations {
-        println!("found relations => skipping since not implemented yet");
+    // Build ways index mapping: way id -> way position.
+    let resource = storage
+        .borrow_mut()
+        .read_and_check_schema("ways", osmflat::schema::resources::osm::WAYS)
+        .expect("failed to read ways");
+    let ways_view: ArrayView<osmflat::Way> = ArrayView::new(&resource);
+    let mut ways_id_to_idx: HashMap<i64, u32> = HashMap::new();
+    ways_id_to_idx.reserve(ways_view.len());
+    for (idx, way) in ways_view.iter().enumerate() {
+        ways_id_to_idx.insert(way.id(), idx as u32);
     }
+
+    // Serialize relations
+    let num_relations = if let Some(index) = pbf_relations {
+        let mut relations = builder.start_relations()?;
+        let mut relation_members = builder.start_relation_members()?;
+
+        for idx in index {
+            let block: osmpbf::PrimitiveBlock = read_block(&mut file, &idx)?;
+            serialize_relations(
+                &block,
+                &nodes_id_to_idx,
+                &ways_id_to_idx,
+                &mut relations,
+                &mut relation_members,
+                &mut tags,
+                &mut stringtable,
+            )?;
+        }
+
+        relations.close()?;
+        relation_members.close()?;
+        relations.len()
+    } else {
+        0
+    };
 
     // Finalize data structures
     stringtable.push(b'\0'); // add sentinel
     builder.set_stringtable(&stringtable)?;
 
-    relations.close()?;
-    relation_members.close()?;
     tags.close()?;
     infos.close()?;
     nodes_index.close()?;
@@ -512,9 +622,7 @@ fn run() -> Result<(), Error> {
   nodes: {},
   ways: {},
   relations: {}"#,
-        num_nodes,
-        num_ways,
-        relations.len()
+        num_nodes, num_ways, num_relations
     );
 
     Ok(())

@@ -62,11 +62,12 @@ namespace osm { @explicit_reference( Relation.tag_first_idx, tags )
     relations: vector<Relation>; }"#;
             pub const RELATION_MEMBERS: &str = r#"namespace osm { struct RelationMember {
     role_idx: u32 : 32;
-    memid: u32 : 32;
+    mem_idx: u32 : 32;
     // populated by MEMBER_TYPE_* constants
-    type: u32 : 2;
+    type: u8 : 2;
 } }
-namespace osm { relation_members: vector<RelationMember>; }"#;
+namespace osm { @explicit_reference( RelationMember.role_idx, stringtable )
+    relation_members: vector<RelationMember>; }"#;
             pub const TAGS: &str = r#"namespace osm { struct Tag {
     key_idx: u32 : 32;
     value_idx: u32 : 32;
@@ -112,9 +113,9 @@ namespace osm { nodes_index: vector<NodeIndex>; }"#;
 } }"#;
         pub const RELATION_MEMBER: &str = r#"namespace osm { struct RelationMember {
     role_idx: u32 : 32;
-    memid: u32 : 32;
+    mem_idx: u32 : 32;
     // populated by MEMBER_TYPE_* constants
-    type: u32 : 2;
+    type: u8 : 2;
 } }"#;
         pub const RELATION: &str = r#"namespace osm { struct Relation {
     id: i64 : 64;
@@ -192,9 +193,9 @@ namespace osm { struct Relation {
 } }
 namespace osm { struct RelationMember {
     role_idx: u32 : 32;
-    memid: u32 : 32;
+    mem_idx: u32 : 32;
     // populated by MEMBER_TYPE_* constants
-    type: u32 : 2;
+    type: u8 : 2;
 } }
 namespace osm { struct Tag {
     key_idx: u32 : 32;
@@ -236,6 +237,8 @@ namespace osm { archive Osm {
     @explicit_reference( Relation.relation_member_first_idx, relation_members )
     @explicit_reference( Relation.info_idx, infos )
     relations: vector<Relation>;
+
+    @explicit_reference( RelationMember.role_idx, stringtable )
     relation_members: vector<RelationMember>;
 
     @explicit_reference( Tag.key_idx, stringtable )
@@ -254,6 +257,14 @@ namespace osm { archive Osm {
 } }"#;
     }
 }
+
+pub const MEMBER_TYPE_RELATION: u8 = 2;
+
+pub const MEMBER_TYPE_WAY: u8 = 1;
+
+pub const MEMBER_TYPE_NODE: u8 = 0;
+
+pub const INVALID_IDX: u32 = 0;
 
 define_struct!(
     NodeIndex,
@@ -291,8 +302,8 @@ define_struct!(
     schema::structs::RELATION_MEMBER,
     9,
     (role_idx, set_role_idx, u32, 0, 32),
-    (memid, set_memid, u32, 32, 32),
-    (type_, set_type, u32, 64, 2)
+    (mem_idx, set_mem_idx, u32, 32, 32),
+    (type_, set_type, u8, 64, 2)
 );
 
 define_struct!(
