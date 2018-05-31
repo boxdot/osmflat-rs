@@ -18,18 +18,21 @@ mod osmflat;
 mod osmpbf;
 
 use args::parse_args;
-use std::io::Seek;
 
 use byteorder::{ByteOrder, NetworkEndian};
 use colored::*;
 use failure::Error;
+use flatdata::ArrayView;
+use flatdata::ResourceStorage;
 use flatdata::{ArchiveBuilder, FileResourceStorage};
 use flate2::read::ZlibDecoder;
 use itertools::Itertools;
 use prost::Message;
 
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::fs::File;
+use std::io::Seek;
 use std::io::{self, BufReader, ErrorKind, Read};
 use std::path::Path;
 use std::rc::Rc;
@@ -282,9 +285,11 @@ fn serialize_dense_nodes(
 
     let mut tags_offset = 0;
 
+    let mut id = 0;
     for i in 0..dense_nodes.id.len() {
         let mut node = nodes.grow()?;
-        node.set_id(dense_nodes.id[i]);
+        id += dense_nodes.id[i];
+        node.set_id(id);
 
         lat += dense_nodes.lat[i];
         lon += dense_nodes.lon[i];
@@ -303,15 +308,59 @@ fn serialize_dense_nodes(
 
                 let mut tag = tags.grow()?;
                 tag.set_key_idx(stringtable.len() as u32);
-                tag.set_value_idx(stringtable.len() as u32);
-
                 stringtable.extend(&block.stringtable.s[k as usize]);
                 stringtable.push(b'\0');
+                tag.set_value_idx(stringtable.len() as u32);
                 stringtable.extend(&block.stringtable.s[v as usize]);
                 stringtable.push(b'\0');
             }
         }
     }
+    Ok(())
+}
+
+fn serialize_ways(
+    block: &osmpbf::PrimitiveBlock,
+    nodes_id_to_idx: &HashMap<i64, u32>,
+    ways: &mut flatdata::ExternalVector<osmflat::Way>,
+    tags: &mut flatdata::ExternalVector<osmflat::Tag>,
+    nodes_index: &mut flatdata::ExternalVector<osmflat::NodeIndex>,
+    stringtable: &mut Vec<u8>,
+) -> Result<(), io::Error> {
+    for group in block.primitivegroup.iter() {
+        for pbf_way in group.ways.iter() {
+            let mut way = ways.grow()?;
+            way.set_id(pbf_way.id);
+
+            debug_assert_eq!(pbf_way.keys.len(), pbf_way.vals.len(), "invalid input data");
+            way.set_tag_first_idx(tags.len() as u32);
+
+            for i in 0..pbf_way.keys.len() {
+                let mut tag = tags.grow()?;
+                tag.set_key_idx(stringtable.len() as u32);
+                stringtable.extend(&block.stringtable.s[pbf_way.keys[i] as usize]);
+                stringtable.push(b'\0');
+                tag.set_value_idx(stringtable.len() as u32);
+                stringtable.extend(&block.stringtable.s[pbf_way.vals[i] as usize]);
+                stringtable.push(b'\0');
+            }
+
+            // TODO: serialize info
+
+            way.set_ref_first_idx(nodes_index.len() as u32);
+            let mut node_ref = 0;
+            for delta in pbf_way.refs.iter() {
+                node_ref += delta;
+                let mut node_idx = nodes_index.grow()?;
+                debug_assert!(
+                    nodes_id_to_idx.get(&node_ref).is_some(),
+                    "invalid input data"
+                );
+                node_idx.set_value(nodes_id_to_idx[&node_ref]);
+            }
+        }
+    }
+
     Ok(())
 }
 
@@ -339,15 +388,14 @@ fn run() -> Result<(), Error> {
     let storage = Rc::new(RefCell::new(FileResourceStorage::new(
         args.arg_output.clone().into(),
     )));
-    let mut builder = osmflat::OsmBuilder::new(storage)?;
+    let mut builder = osmflat::OsmBuilder::new(storage.clone())?;
 
     // fill in dummy data for now
-    let mut nodes = builder.start_nodes()?;
-    let mut ways = builder.start_ways()?;
     let mut relations = builder.start_relations()?;
     let mut relation_members = builder.start_relation_members()?;
     let mut tags = builder.start_tags()?;
     let mut infos = builder.start_infos()?;
+    let mut nodes_index = builder.start_nodes_index()?;
 
     // TODO: Would be nice not store all these strings in memory, but to flush them
     // from time to time to disk.
@@ -392,16 +440,57 @@ fn run() -> Result<(), Error> {
     );
 
     // Serialize dense nodes
-    let index = pbf_dense_nodes.ok_or_else(|| format_err!("missing dense nodes"))?;
-    for idx in index {
-        let block: osmpbf::PrimitiveBlock = read_block(&mut file, &idx)?;
-        serialize_dense_nodes(&block, &mut nodes, &mut tags, &mut stringtable)?;
+    let num_nodes = {
+        let mut nodes = builder.start_nodes()?;
+        let index = pbf_dense_nodes.ok_or_else(|| format_err!("missing dense nodes"))?;
+        for idx in index {
+            let block: osmpbf::PrimitiveBlock = read_block(&mut file, &idx)?;
+            serialize_dense_nodes(&block, &mut nodes, &mut tags, &mut stringtable)?;
+        }
+        {
+            let mut sentinel = nodes.grow()?;
+            sentinel.set_tag_first_idx(tags.len() as u32);
+        }
+        nodes.close()?;
+        nodes.len() - 1
+    };
+
+    // Build nodes index mapping: node id -> node position.
+    let resource = storage
+        .borrow_mut()
+        .read_and_check_schema("nodes", osmflat::schema::resources::osm::NODES)
+        .expect("failed to read vector resource");
+    let nodes_view: ArrayView<osmflat::Node> = ArrayView::new(&resource);
+    let mut nodes_id_to_idx: HashMap<i64, u32> = HashMap::new();
+    nodes_id_to_idx.reserve(nodes_view.len());
+    for (idx, node) in nodes_view.iter().enumerate() {
+        nodes_id_to_idx.insert(node.id(), idx as u32);
     }
 
     // Serialize ways
-    if let Some(_pbf_ways) = pbf_ways {
-        println!("found ways => skipping since not implemented yet");
-    }
+    let num_ways = if let Some(index) = pbf_ways {
+        let mut ways = builder.start_ways()?;
+        for idx in index {
+            let block: osmpbf::PrimitiveBlock = read_block(&mut file, &idx)?;
+            serialize_ways(
+                &block,
+                &nodes_id_to_idx,
+                &mut ways,
+                &mut tags,
+                &mut nodes_index,
+                &mut stringtable,
+            )?;
+        }
+        {
+            let mut sentinel = ways.grow()?;
+            sentinel.set_tag_first_idx(tags.len() as u32);
+            sentinel.set_ref_first_idx(nodes_index.len() as u32);
+        }
+        ways.close()?;
+        ways.len() - 1
+    } else {
+        0
+    };
 
     // Serialize ways
     if let Some(_pbf_relations) = pbf_relations {
@@ -412,20 +501,19 @@ fn run() -> Result<(), Error> {
     stringtable.push(b'\0'); // add sentinel
     builder.set_stringtable(&stringtable)?;
 
-    nodes.close()?;
-    ways.close()?;
     relations.close()?;
     relation_members.close()?;
     tags.close()?;
     infos.close()?;
+    nodes_index.close()?;
 
     println!(
         r#"Serialized:
   nodes: {},
   ways: {},
   relations: {}"#,
-        nodes.len(),
-        ways.len(),
+        num_nodes,
+        num_ways,
         relations.len()
     );
 
