@@ -1,6 +1,6 @@
 use docopt::Docopt;
 
-const USAGE: &'static str = "
+const USAGE: &str = "
 Compiler from osm.pbf format to osm.flatdata format.
 
 Usage:

@@ -37,8 +37,7 @@ use prost::Message;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::Seek;
-use std::io::{self, BufReader, ErrorKind, Read};
+use std::io::{self, BufReader, ErrorKind, Read, Seek};
 use std::path::Path;
 use std::rc::Rc;
 
@@ -332,8 +331,8 @@ fn serialize_ways(
     nodes_index: &mut flatdata::ExternalVector<osmflat::NodeIndex>,
     stringtable: &mut Vec<u8>,
 ) -> Result<(), io::Error> {
-    for group in block.primitivegroup.iter() {
-        for pbf_way in group.ways.iter() {
+    for group in &block.primitivegroup {
+        for pbf_way in &group.ways {
             let mut way = ways.grow()?;
             way.set_id(pbf_way.id);
 
@@ -354,7 +353,7 @@ fn serialize_ways(
 
             way.set_ref_first_idx(nodes_index.len() as u32);
             let mut node_ref = 0;
-            for delta in pbf_way.refs.iter() {
+            for delta in &pbf_way.refs {
                 node_ref += delta;
                 let mut node_idx = nodes_index.grow()?;
                 debug_assert!(
@@ -378,8 +377,8 @@ fn serialize_relations(
     tags: &mut flatdata::ExternalVector<osmflat::Tag>,
     stringtable: &mut Vec<u8>,
 ) -> Result<(), io::Error> {
-    for group in block.primitivegroup.iter() {
-        for pbf_relation in group.relations.iter() {
+    for group in &block.primitivegroup {
+        for pbf_relation in &group.relations {
             let mut relation = relations.grow()?;
             relation.set_id(pbf_relation.id);
 
