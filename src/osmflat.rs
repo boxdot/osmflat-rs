@@ -53,21 +53,31 @@ namespace osm { @explicit_reference( Way.tag_first_idx, tags )
             pub const RELATIONS: &str = r#"namespace osm { struct Relation {
     id: i64 : 64;
     tag_first_idx: u32 : 32;
-    relation_member_first_idx: u32 : 32;
     info_idx: u32 : 32;
 } }
 namespace osm { @explicit_reference( Relation.tag_first_idx, tags )
-    @explicit_reference( Relation.relation_member_first_idx, relation_members )
     @explicit_reference( Relation.info_idx, infos )
     relations: vector<Relation>; }"#;
-            pub const RELATION_MEMBERS: &str = r#"namespace osm { struct RelationMember {
+            pub const RELATION_MEMBERS: &str = r#"namespace osm { struct NodeMember {
+    node_idx: u32 : 32;
     role_idx: u32 : 32;
-    mem_idx: u32 : 32;
-    // populated by MEMBER_TYPE_* constants
-    type: u8 : 2;
 } }
-namespace osm { @explicit_reference( RelationMember.role_idx, stringtable )
-    relation_members: vector<RelationMember>; }"#;
+namespace osm { struct WayMember {
+    way_idx: u32 : 32;
+    role_idx: u32 : 32;
+} }
+namespace osm { struct RelationMember {
+    relation_idx: u32 : 32;
+    role_idx: u32 : 32;
+} }
+namespace _builtin.multivector { struct IndexType32 { value : u64 : 32; } }
+namespace osm { @explicit_reference( NodeMember.node_idx, nodes )
+    @explicit_reference( NodeMember.role_idx, stringtable )
+    @explicit_reference( WayMember.way_idx, ways )
+    @explicit_reference( WayMember.role_idx, stringtable )
+    @explicit_reference( RelationMember.relation_idx, relations )
+    @explicit_reference( RelationMember.role_idx, stringtable )
+    relation_members: multivector<32, NodeMember, WayMember, RelationMember>; }"#;
             pub const TAGS: &str = r#"namespace osm { struct Tag {
     key_idx: u32 : 32;
     value_idx: u32 : 32;
@@ -96,6 +106,8 @@ namespace osm { nodes_index: vector<NodeIndex>; }"#;
         }
     }
     pub mod structs {
+        pub const INDEX_TYPE32: &str =
+            r#"namespace _builtin.multivector { struct IndexType32 { value : u64 : 32; } }"#;
         pub const NODE_INDEX: &str = r#"namespace osm { struct NodeIndex {
     value: u32 : 32;
 } }"#;
@@ -112,15 +124,20 @@ namespace osm { nodes_index: vector<NodeIndex>; }"#;
     value_idx: u32 : 32;
 } }"#;
         pub const RELATION_MEMBER: &str = r#"namespace osm { struct RelationMember {
+    relation_idx: u32 : 32;
     role_idx: u32 : 32;
-    mem_idx: u32 : 32;
-    // populated by MEMBER_TYPE_* constants
-    type: u8 : 2;
+} }"#;
+        pub const WAY_MEMBER: &str = r#"namespace osm { struct WayMember {
+    way_idx: u32 : 32;
+    role_idx: u32 : 32;
+} }"#;
+        pub const NODE_MEMBER: &str = r#"namespace osm { struct NodeMember {
+    node_idx: u32 : 32;
+    role_idx: u32 : 32;
 } }"#;
         pub const RELATION: &str = r#"namespace osm { struct Relation {
     id: i64 : 64;
     tag_first_idx: u32 : 32;
-    relation_member_first_idx: u32 : 32;
     info_idx: u32 : 32;
 } }"#;
         pub const WAY: &str = r#"namespace osm { struct Way {
@@ -188,15 +205,21 @@ namespace osm { struct Way {
 namespace osm { struct Relation {
     id: i64 : 64;
     tag_first_idx: u32 : 32;
-    relation_member_first_idx: u32 : 32;
     info_idx: u32 : 32;
 } }
-namespace osm { struct RelationMember {
+namespace osm { struct NodeMember {
+    node_idx: u32 : 32;
     role_idx: u32 : 32;
-    mem_idx: u32 : 32;
-    // populated by MEMBER_TYPE_* constants
-    type: u8 : 2;
 } }
+namespace osm { struct WayMember {
+    way_idx: u32 : 32;
+    role_idx: u32 : 32;
+} }
+namespace osm { struct RelationMember {
+    relation_idx: u32 : 32;
+    role_idx: u32 : 32;
+} }
+namespace _builtin.multivector { struct IndexType32 { value : u64 : 32; } }
 namespace osm { struct Tag {
     key_idx: u32 : 32;
     value_idx: u32 : 32;
@@ -213,10 +236,8 @@ namespace osm { struct NodeIndex {
     value: u32 : 32;
 } }
 namespace osm { const u32 INVALID_IDX = 0; }
-namespace osm { const u8 MEMBER_TYPE_NODE = 0; }
-namespace osm { const u8 MEMBER_TYPE_WAY = 1; }
-namespace osm { const u8 MEMBER_TYPE_RELATION = 2; }
-namespace osm { archive Osm {
+namespace osm { @bound_implicitly(Relations: relations, relation_members)
+archive Osm {
     @explicit_reference( Header.required_feature_first_idx, stringtable )
     @explicit_reference( Header.optional_feature_first_idx, stringtable )
     @explicit_reference( Header.writingprogram_idx, stringtable )
@@ -234,12 +255,16 @@ namespace osm { archive Osm {
     ways: vector<Way>;
 
     @explicit_reference( Relation.tag_first_idx, tags )
-    @explicit_reference( Relation.relation_member_first_idx, relation_members )
     @explicit_reference( Relation.info_idx, infos )
     relations: vector<Relation>;
 
+    @explicit_reference( NodeMember.node_idx, nodes )
+    @explicit_reference( NodeMember.role_idx, stringtable )
+    @explicit_reference( WayMember.way_idx, ways )
+    @explicit_reference( WayMember.role_idx, stringtable )
+    @explicit_reference( RelationMember.relation_idx, relations )
     @explicit_reference( RelationMember.role_idx, stringtable )
-    relation_members: vector<RelationMember>;
+    relation_members: multivector<32, NodeMember, WayMember, RelationMember>;
 
     @explicit_reference( Tag.key_idx, stringtable )
     @explicit_reference( Tag.value_idx, stringtable )
@@ -257,12 +282,6 @@ namespace osm { archive Osm {
 } }"#;
     }
 }
-
-pub const MEMBER_TYPE_RELATION: u8 = 2;
-
-pub const MEMBER_TYPE_WAY: u8 = 1;
-
-pub const MEMBER_TYPE_NODE: u8 = 0;
 
 pub const INVALID_IDX: u32 = 0;
 
@@ -300,27 +319,37 @@ define_struct!(
     RelationMember,
     RelationMemberMut,
     schema::structs::RELATION_MEMBER,
-    9,
-    (role_idx, set_role_idx, u32, 0, 32),
-    (mem_idx, set_mem_idx, u32, 32, 32),
-    (type_, set_type, u8, 64, 2)
+    8,
+    (relation_idx, set_relation_idx, u32, 0, 32),
+    (role_idx, set_role_idx, u32, 32, 32)
+);
+
+define_struct!(
+    WayMember,
+    WayMemberMut,
+    schema::structs::WAY_MEMBER,
+    8,
+    (way_idx, set_way_idx, u32, 0, 32),
+    (role_idx, set_role_idx, u32, 32, 32)
+);
+
+define_struct!(
+    NodeMember,
+    NodeMemberMut,
+    schema::structs::NODE_MEMBER,
+    8,
+    (node_idx, set_node_idx, u32, 0, 32),
+    (role_idx, set_role_idx, u32, 32, 32)
 );
 
 define_struct!(
     Relation,
     RelationMut,
     schema::structs::RELATION,
-    20,
+    16,
     (id, set_id, i64, 0, 64),
     (tag_first_idx, set_tag_first_idx, u32, 64, 32),
-    (
-        relation_member_first_idx,
-        set_relation_member_first_idx,
-        u32,
-        96,
-        32
-    ),
-    (info_idx, set_info_idx, u32, 128, 32)
+    (info_idx, set_info_idx, u32, 96, 32)
 );
 
 define_struct!(
@@ -408,6 +437,20 @@ define_struct!(
     )
 );
 
+/// Builtin type to for MultiVector index */
+define_index!(
+    IndexType32,
+    IndexType32Mut,
+    schema::structs::INDEX_TYPE32,
+    4,
+    32
+);
+
+define_variadic_struct!(RelationMembers, RelationMembersItemBuilder, IndexType32,
+    0 => (NodeMember, add_node_member),
+    1 => (WayMember, add_way_member),
+    2 => (RelationMember, add_relation_member));
+
 define_archive!(Osm, OsmBuilder,
     schema::structs::OSM;
     // struct resources
@@ -420,8 +463,6 @@ define_archive!(Osm, OsmBuilder,
         Way, schema::resources::osm::WAYS),
     (relations, set_relations, start_relations,
         Relation, schema::resources::osm::RELATIONS),
-    (relation_members, set_relation_members, start_relation_members,
-        RelationMember, schema::resources::osm::RELATION_MEMBERS),
     (tags, set_tags, start_tags,
         Tag, schema::resources::osm::TAGS),
     (infos, set_infos, start_infos,
@@ -429,7 +470,9 @@ define_archive!(Osm, OsmBuilder,
     (nodes_index, set_nodes_index, start_nodes_index,
         NodeIndex, schema::resources::osm::NODES_INDEX);
     // multivector resources
-;
+    (relation_members, start_relation_members,
+        RelationMembers, schema::resources::osm::RELATION_MEMBERS,
+        relation_members_index, IndexType32);
     // raw data resources
     (stringtable, set_stringtable,
         schema::resources::osm::STRINGTABLE);

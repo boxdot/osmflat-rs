@@ -1,3 +1,10 @@
+// TODO:
+//
+// 1. Deduplicate strings: size of the stringtable for Berlin is 40M without
+//    dedup.
+// 2. Do not deserialize the whole pbf file twice. For the first time, it
+//    should be enough just to figure out what is inside primitiveblock.
+
 extern crate byteorder;
 extern crate colored;
 extern crate docopt;
@@ -22,9 +29,7 @@ use args::parse_args;
 use byteorder::{ByteOrder, NetworkEndian};
 use colored::*;
 use failure::Error;
-use flatdata::ArrayView;
-use flatdata::ResourceStorage;
-use flatdata::{ArchiveBuilder, FileResourceStorage};
+use flatdata::{ArchiveBuilder, ArrayView, FileResourceStorage, ResourceStorage};
 use flate2::read::ZlibDecoder;
 use itertools::Itertools;
 use prost::Message;
@@ -369,7 +374,7 @@ fn serialize_relations(
     nodes_id_to_idx: &HashMap<i64, u32>,
     ways_id_to_idx: &HashMap<i64, u32>,
     relations: &mut flatdata::ExternalVector<osmflat::Relation>,
-    relation_members: &mut flatdata::ExternalVector<osmflat::RelationMember>,
+    relation_members: &mut flatdata::MultiVector<osmflat::IndexType32, osmflat::RelationMembers>,
     tags: &mut flatdata::ExternalVector<osmflat::Tag>,
     stringtable: &mut Vec<u8>,
 ) -> Result<(), io::Error> {
@@ -402,44 +407,54 @@ fn serialize_relations(
                 "invalid input data"
             );
 
-            relation.set_relation_member_first_idx(relation_members.len() as u32);
-
             let mut memid = 0;
+            let mut members = relation_members.grow()?;
             for i in 0..pbf_relation.roles_sid.len() {
                 memid += pbf_relation.memids[i];
 
                 let member_type = osmpbf::relation::MemberType::from_i32(pbf_relation.types[i]);
                 debug_assert!(member_type.is_some());
 
-                let (mem_idx, mem_type) = match member_type.unwrap() {
+                match member_type.unwrap() {
                     osmpbf::relation::MemberType::Node => {
                         if let Some(&idx) = nodes_id_to_idx.get(&memid) {
-                            (idx, osmflat::MEMBER_TYPE_NODE)
+                            let mut member = members.add_node_member();
+                            member.set_node_idx(idx);
+                            member.set_role_idx(stringtable.len() as u32);
+                            stringtable
+                                .extend(&block.stringtable.s[pbf_relation.roles_sid[i] as usize]);
+                            stringtable.push(b'\0');
                         } else {
-                            eprintln!("Skipping relation containing unresolved node {}", memid);
+                            eprintln!(
+                                "Skipping relation member containing unresolved node {}",
+                                memid
+                            );
                             continue;
                         }
                     }
                     osmpbf::relation::MemberType::Way => {
                         if let Some(&idx) = ways_id_to_idx.get(&memid) {
-                            (idx, osmflat::MEMBER_TYPE_WAY)
+                            let mut member = members.add_way_member();
+                            member.set_way_idx(idx);
+                            member.set_role_idx(stringtable.len() as u32);
+                            stringtable
+                                .extend(&block.stringtable.s[pbf_relation.roles_sid[i] as usize]);
+                            stringtable.push(b'\0');
                         } else {
-                            eprintln!("Skipping relation containing unresolved way {}", memid);
+                            eprintln!(
+                                "Skipping relation member containing unresolved way {}",
+                                memid
+                            );
                             continue;
                         }
                     }
                     osmpbf::relation::MemberType::Relation => {
-                        eprintln!("Skipping relation containing relations => not implemented");
+                        eprintln!(
+                            "Skipping relation member containing relation => not implemented"
+                        );
                         continue;
                     }
-                };
-
-                let mut member = relation_members.grow()?;
-                member.set_mem_idx(mem_idx);
-                member.set_type(mem_type);
-                member.set_role_idx(stringtable.len() as u32);
-                stringtable.extend(&block.stringtable.s[pbf_relation.roles_sid[i] as usize]);
-                stringtable.push(b'\0');
+                }
             }
         }
     }

@@ -54,24 +54,28 @@ struct Way {
     info_idx: u32 : 32;
 }
 
-const u8 MEMBER_TYPE_NODE = 0;
-const u8 MEMBER_TYPE_WAY = 1;
-const u8 MEMBER_TYPE_RELATION = 2;
+struct NodeMember {
+    node_idx: u32 : 32;
+    role_idx: u32 : 32;
+}
+
+struct WayMember {
+    way_idx: u32 : 32;
+    role_idx: u32 : 32;
+}
 
 struct RelationMember {
+    relation_idx: u32 : 32;
     role_idx: u32 : 32;
-    mem_idx: u32 : 32;
-    // populated by MEMBER_TYPE_* constants
-    type: u8 : 2;
 }
 
 struct Relation {
     id: i64 : 64;
     tag_first_idx: u32 : 32;
-    relation_member_first_idx: u32 : 32;
     info_idx: u32 : 32;
 }
 
+@bound_implicitly(Relations: relations, relation_members)
 archive Osm {
     @explicit_reference( Header.required_feature_first_idx, stringtable )
     @explicit_reference( Header.optional_feature_first_idx, stringtable )
@@ -90,12 +94,16 @@ archive Osm {
     ways: vector<Way>;
 
     @explicit_reference( Relation.tag_first_idx, tags )
-    @explicit_reference( Relation.relation_member_first_idx, relation_members )
     @explicit_reference( Relation.info_idx, infos )
     relations: vector<Relation>;
 
+    @explicit_reference( NodeMember.node_idx, nodes )
+    @explicit_reference( NodeMember.role_idx, stringtable )
+    @explicit_reference( WayMember.way_idx, ways )
+    @explicit_reference( WayMember.role_idx, stringtable )
+    @explicit_reference( RelationMember.relation_idx, relations )
     @explicit_reference( RelationMember.role_idx, stringtable )
-    relation_members: vector<RelationMember>;
+    relation_members: multivector<32, NodeMember, WayMember, RelationMember>;
 
     @explicit_reference( Tag.key_idx, stringtable )
     @explicit_reference( Tag.value_idx, stringtable )
