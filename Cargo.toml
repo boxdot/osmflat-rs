@@ -1,5 +1,5 @@
 [package]
-name = "osm-flatdata"
+name = "osmflat"
 version = "0.1.0"
 authors = ["boxdot <d@zerovolt.org>"]
 

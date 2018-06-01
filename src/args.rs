@@ -1,10 +1,10 @@
 use docopt::Docopt;
 
 const USAGE: &str = "
-Compiler from osm.pbf format to osm.flatdata format.
+Compiler of Open Street Data from osm.pbf format to osm.flatdata format.
 
 Usage:
-  osm-flatdata <input> <output>
+  osmflat <input> <output>
 ";
 
 #[derive(Debug, Deserialize)]
