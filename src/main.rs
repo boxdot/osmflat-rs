@@ -401,10 +401,29 @@ fn serialize_ways(
     Ok(stats)
 }
 
+fn build_relations_index<'a, F: Read + Seek, I: 'a + Iterator<Item = &'a BlockIndex>>(
+    reader: &mut F,
+    block_index: I,
+) -> Result<HashMap<i64, u32>, Error> {
+    let mut idx = 1; // we start counting with 1, since 0 is reserved for invalid relation.
+    let mut result = HashMap::new();
+    for block_idx in block_index {
+        let block: osmpbf::PrimitiveBlock = read_block(reader, &block_idx)?;
+        for group in &block.primitivegroup {
+            for relation in &group.relations {
+                result.insert(relation.id, idx);
+                idx += 1;
+            }
+        }
+    }
+    Ok(result)
+}
+
 fn serialize_relations(
     block: &osmpbf::PrimitiveBlock,
     nodes_id_to_idx: &HashMap<i64, u32>,
     ways_id_to_idx: &HashMap<i64, u32>,
+    relations_id_to_idx: &HashMap<i64, u32>,
     relations: &mut flatdata::ExternalVector<osmflat::Relation>,
     relation_members: &mut flatdata::MultiVector<osmflat::IndexType32, osmflat::RelationMembers>,
     tags: &mut flatdata::ExternalVector<osmflat::Tag>,
@@ -482,14 +501,24 @@ fn serialize_relations(
                         stringtable.push(b'\0');
                     }
                     osmpbf::relation::MemberType::Relation => {
-                        // TODO: Not yet implemented
-                        stats.num_unresolved_rel_ids += 1;
-                        continue;
+                        let idx = match relations_id_to_idx.get(&memid) {
+                            Some(idx) => *idx,
+                            None => {
+                                stats.num_unresolved_rel_ids += 1;
+                                osmflat::INVALID_IDX
+                            }
+                        };
+
+                        let mut member = members.add_relation_member();
+                        member.set_relation_idx(idx);
+                        stringtable
+                            .extend(&block.stringtable.s[pbf_relation.roles_sid[i] as usize]);
+                        stringtable.push(b'\0');
                     }
                 }
             }
+            stats.num_relations += 1;
         }
-        stats.num_relations += group.relations.len();
     }
     Ok(stats)
 }
@@ -599,6 +628,8 @@ fn run() -> Result<(), Error> {
     // Serialize ways
     if let Some(index) = pbf_ways {
         let mut ways = builder.start_ways()?;
+        ways.grow()?; // index 0 is reserved for invalid way
+
         for idx in index {
             let block: osmpbf::PrimitiveBlock = read_block(&mut file, &idx)?;
             stats += serialize_ways(
@@ -632,20 +663,32 @@ fn run() -> Result<(), Error> {
 
     // Serialize relations
     if let Some(index) = pbf_relations {
+        // We need to build the index of relation ids first, since relations can refer
+        // again to relations.
+        let index: Vec<_> = index.collect();
+        let relations_id_to_idx = build_relations_index(&mut file, index.iter())?;
+
         let mut relations = builder.start_relations()?;
+        relations.grow()?; // index 0 is reserved for invalid relation
+
         let mut relation_members = builder.start_relation_members()?;
 
-        for idx in index {
+        for idx in index.into_iter() {
             let block: osmpbf::PrimitiveBlock = read_block(&mut file, &idx)?;
             stats += serialize_relations(
                 &block,
                 &nodes_id_to_idx,
                 &ways_id_to_idx,
+                &relations_id_to_idx,
                 &mut relations,
                 &mut relation_members,
                 &mut tags,
                 &mut stringtable,
             )?;
+        }
+        {
+            let mut sentinel = relations.grow()?;
+            sentinel.set_tag_first_idx(tags.len() as u32);
         }
 
         relations.close()?;
