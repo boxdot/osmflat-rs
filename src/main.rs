@@ -30,7 +30,7 @@ use stats::Stats;
 use byteorder::{ByteOrder, NetworkEndian};
 use colored::*;
 use failure::Error;
-use flatdata::{ArchiveBuilder, ArrayView, FileResourceStorage, ResourceStorage};
+use flatdata::{ArchiveBuilder, FileResourceStorage};
 use flate2::read::ZlibDecoder;
 use itertools::Itertools;
 use prost::Message;
@@ -302,6 +302,7 @@ fn serialize_header(
 fn serialize_dense_nodes(
     block: &osmpbf::PrimitiveBlock,
     nodes: &mut flatdata::ExternalVector<osmflat::Node>,
+    nodes_id_to_idx: &mut HashMap<i64, u32>,
     tags: &mut flatdata::ExternalVector<osmflat::Tag>,
     stringtable: &mut Vec<u8>,
 ) -> Result<Stats, io::Error> {
@@ -318,8 +319,11 @@ fn serialize_dense_nodes(
 
     let mut id = 0;
     for i in 0..dense_nodes.id.len() {
-        let mut node = nodes.grow()?;
         id += dense_nodes.id[i];
+
+        nodes_id_to_idx.insert(id, nodes.len() as u32);
+
+        let mut node = nodes.grow()?;
         node.set_id(id);
 
         lat += dense_nodes.lat[i];
@@ -356,6 +360,7 @@ fn serialize_ways(
     block: &osmpbf::PrimitiveBlock,
     nodes_id_to_idx: &HashMap<i64, u32>,
     ways: &mut flatdata::ExternalVector<osmflat::Way>,
+    ways_id_to_idx: &mut HashMap<i64, u32>,
     tags: &mut flatdata::ExternalVector<osmflat::Tag>,
     nodes_index: &mut flatdata::ExternalVector<osmflat::NodeIndex>,
     stringtable: &mut Vec<u8>,
@@ -363,6 +368,8 @@ fn serialize_ways(
     let mut stats = Stats::default();
     for group in &block.primitivegroup {
         for pbf_way in &group.ways {
+            ways_id_to_idx.insert(pbf_way.id, ways.len() as u32);
+
             let mut way = ways.grow()?;
             way.set_id(pbf_way.id);
 
@@ -599,12 +606,18 @@ fn run() -> Result<(), Error> {
     let mut stats = Stats::default();
 
     // Serialize dense nodes
-    {
+    let mut nodes_id_to_idx: HashMap<i64, u32> = HashMap::new();
+    if let Some(index) = pbf_dense_nodes {
         let mut nodes = builder.start_nodes()?;
-        let index = pbf_dense_nodes.ok_or_else(|| format_err!("missing dense nodes"))?;
         for idx in index {
             let block: osmpbf::PrimitiveBlock = read_block(&mut file, &idx)?;
-            stats += serialize_dense_nodes(&block, &mut nodes, &mut tags, &mut stringtable)?;
+            stats += serialize_dense_nodes(
+                &block,
+                &mut nodes,
+                &mut nodes_id_to_idx,
+                &mut tags,
+                &mut stringtable,
+            )?;
         }
         {
             let mut sentinel = nodes.grow()?;
@@ -613,19 +626,8 @@ fn run() -> Result<(), Error> {
         nodes.close()?;
     }
 
-    // Build nodes index mapping: node id -> node position.
-    let resource = storage
-        .borrow_mut()
-        .read_and_check_schema("nodes", osmflat::schema::resources::osm::NODES)
-        .expect("failed to read nodes");
-    let nodes_view: ArrayView<osmflat::Node> = ArrayView::new(&resource);
-    let mut nodes_id_to_idx: HashMap<i64, u32> = HashMap::new();
-    nodes_id_to_idx.reserve(nodes_view.len());
-    for (idx, node) in nodes_view.iter().enumerate() {
-        nodes_id_to_idx.insert(node.id(), idx as u32);
-    }
-
     // Serialize ways
+    let mut ways_id_to_idx: HashMap<i64, u32> = HashMap::new();
     if let Some(index) = pbf_ways {
         let mut ways = builder.start_ways()?;
         ways.grow()?; // index 0 is reserved for invalid way
@@ -636,6 +638,7 @@ fn run() -> Result<(), Error> {
                 &block,
                 &nodes_id_to_idx,
                 &mut ways,
+                &mut ways_id_to_idx,
                 &mut tags,
                 &mut nodes_index,
                 &mut stringtable,
@@ -648,18 +651,6 @@ fn run() -> Result<(), Error> {
         }
         ways.close()?;
     };
-
-    // Build ways index mapping: way id -> way position.
-    let resource = storage
-        .borrow_mut()
-        .read_and_check_schema("ways", osmflat::schema::resources::osm::WAYS)
-        .expect("failed to read ways");
-    let ways_view: ArrayView<osmflat::Way> = ArrayView::new(&resource);
-    let mut ways_id_to_idx: HashMap<i64, u32> = HashMap::new();
-    ways_id_to_idx.reserve(ways_view.len());
-    for (idx, way) in ways_view.iter().enumerate() {
-        ways_id_to_idx.insert(way.id(), idx as u32);
-    }
 
     // Serialize relations
     if let Some(index) = pbf_relations {
