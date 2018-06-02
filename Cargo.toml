@@ -20,3 +20,6 @@ itertools = "*"
 
 [build-dependencies]
 prost-build = "*"
+
+[dev-dependencies]
+proptest = "0.6.0"

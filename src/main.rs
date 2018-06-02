@@ -1,8 +1,3 @@
-// TODO:
-//
-// 1. Deduplicate strings: size of the stringtable for Berlin is 40M without
-//    dedup.
-
 extern crate byteorder;
 extern crate colored;
 extern crate docopt;
@@ -18,14 +13,19 @@ extern crate prost_derive;
 #[macro_use]
 extern crate serde_derive;
 extern crate bytes;
+#[cfg(test)]
+#[macro_use]
+extern crate proptest;
 
 mod args;
 mod osmflat;
 mod osmpbf;
 mod stats;
+mod strings;
 
 use args::parse_args;
 use stats::Stats;
+use strings::StringTable;
 
 use byteorder::{ByteOrder, NetworkEndian};
 use colored::*;
@@ -41,6 +41,7 @@ use std::fs::File;
 use std::io::{self, BufReader, Cursor, ErrorKind, Read, Seek, SeekFrom};
 use std::path::Path;
 use std::rc::Rc;
+use std::str;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum BlockType {
@@ -243,7 +244,7 @@ impl Iterator for OsmBlockIndexIterator {
 fn serialize_header(
     header_block: &osmpbf::HeaderBlock,
     builder: &mut osmflat::OsmBuilder,
-    stringtable: &mut Vec<u8>,
+    stringtable: &mut StringTable,
 ) -> Result<(), io::Error> {
     let mut header = flatdata::StructBuf::<osmflat::Header>::new();
 
@@ -254,31 +255,25 @@ fn serialize_header(
         header.set_bbox_bottom(bbox.bottom);
     };
 
-    header.set_required_feature_first_idx(stringtable.len() as u32);
+    header.set_required_feature_first_idx(stringtable.next_index());
     header.set_required_features_size(header_block.required_features.len() as u32);
     for feature in &header_block.required_features {
-        stringtable.extend(feature.as_bytes());
-        stringtable.push(b'\0');
+        stringtable.push(feature.clone());
     }
 
-    header.set_optional_feature_first_idx(stringtable.len() as u32);
+    header.set_optional_feature_first_idx(stringtable.next_index());
     header.set_optional_features_size(header_block.optional_features.len() as u32);
     for feature in &header_block.optional_features {
-        stringtable.extend(feature.as_bytes());
-        stringtable.push(b'\0');
+        stringtable.push(feature.clone());
     }
 
     if let Some(ref writingprogram) = header_block.writingprogram {
         // TODO: Should we also add our name here?
-        header.set_writingprogram_idx(stringtable.len() as u32);
-        stringtable.extend(writingprogram.as_bytes());
-        stringtable.push(b'\0');
+        header.set_writingprogram_idx(stringtable.push(writingprogram.clone()));
     }
 
     if let Some(ref source) = header_block.source {
-        header.set_source_idx(stringtable.len() as u32);
-        stringtable.extend(source.as_bytes());
-        stringtable.push(b'\0');
+        header.set_source_idx(stringtable.push(source.clone()));
     }
 
     if let Some(timestamp) = header_block.osmosis_replication_timestamp {
@@ -290,13 +285,27 @@ fn serialize_header(
     }
 
     if let Some(ref url) = header_block.osmosis_replication_base_url {
-        header.set_osmosis_replication_base_url_idx(stringtable.len() as u32);
-        stringtable.extend(url.as_bytes());
-        stringtable.push(b'\0');
+        header.set_osmosis_replication_base_url_idx(stringtable.push(url.clone()));
     }
 
     builder.set_header(&header)?;
     Ok(())
+}
+
+fn serialize_tag(
+    pbf_stringtable: &osmpbf::StringTable,
+    k: u32,
+    v: u32,
+    tags: &mut flatdata::ExternalVector<osmflat::Tag>,
+    stringtable: &mut StringTable,
+) -> Result<u32, Error> {
+    let idx = tags.len() as u32;
+    let mut tag = tags.grow()?;
+    let key = str::from_utf8(&pbf_stringtable.s[k as usize])?;
+    tag.set_key_idx(stringtable.insert(key));
+    let val = str::from_utf8(&pbf_stringtable.s[v as usize])?;
+    tag.set_value_idx(stringtable.insert(val));
+    Ok(idx)
 }
 
 fn serialize_dense_nodes(
@@ -304,8 +313,8 @@ fn serialize_dense_nodes(
     nodes: &mut flatdata::ExternalVector<osmflat::Node>,
     nodes_id_to_idx: &mut HashMap<i64, u32>,
     tags: &mut flatdata::ExternalVector<osmflat::Tag>,
-    stringtable: &mut Vec<u8>,
-) -> Result<Stats, io::Error> {
+    stringtable: &mut StringTable,
+) -> Result<Stats, Error> {
     let group = &block.primitivegroup[0];
     let dense_nodes = group.dense.as_ref().unwrap();
 
@@ -341,13 +350,7 @@ fn serialize_dense_nodes(
                 let v = dense_nodes.keys_vals[tags_offset + 1];
                 tags_offset += 2;
 
-                let mut tag = tags.grow()?;
-                tag.set_key_idx(stringtable.len() as u32);
-                stringtable.extend(&block.stringtable.s[k as usize]);
-                stringtable.push(b'\0');
-                tag.set_value_idx(stringtable.len() as u32);
-                stringtable.extend(&block.stringtable.s[v as usize]);
-                stringtable.push(b'\0');
+                serialize_tag(&block.stringtable, k as u32, v as u32, tags, stringtable)?;
             }
         }
     }
@@ -363,8 +366,8 @@ fn serialize_ways(
     ways_id_to_idx: &mut HashMap<i64, u32>,
     tags: &mut flatdata::ExternalVector<osmflat::Tag>,
     nodes_index: &mut flatdata::ExternalVector<osmflat::NodeIndex>,
-    stringtable: &mut Vec<u8>,
-) -> Result<Stats, io::Error> {
+    stringtable: &mut StringTable,
+) -> Result<Stats, Error> {
     let mut stats = Stats::default();
     for group in &block.primitivegroup {
         for pbf_way in &group.ways {
@@ -377,13 +380,13 @@ fn serialize_ways(
             way.set_tag_first_idx(tags.len() as u32);
 
             for i in 0..pbf_way.keys.len() {
-                let mut tag = tags.grow()?;
-                tag.set_key_idx(stringtable.len() as u32);
-                stringtable.extend(&block.stringtable.s[pbf_way.keys[i] as usize]);
-                stringtable.push(b'\0');
-                tag.set_value_idx(stringtable.len() as u32);
-                stringtable.extend(&block.stringtable.s[pbf_way.vals[i] as usize]);
-                stringtable.push(b'\0');
+                serialize_tag(
+                    &block.stringtable,
+                    pbf_way.keys[i],
+                    pbf_way.vals[i],
+                    tags,
+                    stringtable,
+                )?;
             }
 
             // TODO: serialize info
@@ -434,8 +437,8 @@ fn serialize_relations(
     relations: &mut flatdata::ExternalVector<osmflat::Relation>,
     relation_members: &mut flatdata::MultiVector<osmflat::IndexType32, osmflat::RelationMembers>,
     tags: &mut flatdata::ExternalVector<osmflat::Tag>,
-    stringtable: &mut Vec<u8>,
-) -> Result<Stats, io::Error> {
+    stringtable: &mut StringTable,
+) -> Result<Stats, Error> {
     let mut stats = Stats::default();
     for group in &block.primitivegroup {
         for pbf_relation in &group.relations {
@@ -449,13 +452,13 @@ fn serialize_relations(
             );
             relation.set_tag_first_idx(tags.len() as u32);
             for i in 0..pbf_relation.keys.len() {
-                let mut tag = tags.grow()?;
-                tag.set_key_idx(stringtable.len() as u32);
-                stringtable.extend(&block.stringtable.s[pbf_relation.keys[i] as usize]);
-                stringtable.push(b'\0');
-                tag.set_value_idx(stringtable.len() as u32);
-                stringtable.extend(&block.stringtable.s[pbf_relation.vals[i] as usize]);
-                stringtable.push(b'\0');
+                serialize_tag(
+                    &block.stringtable,
+                    pbf_relation.keys[i],
+                    pbf_relation.vals[i],
+                    tags,
+                    stringtable,
+                )?;
             }
 
             // TODO: Serialized infos
@@ -486,10 +489,10 @@ fn serialize_relations(
 
                         let mut member = members.add_node_member();
                         member.set_node_idx(idx);
-                        member.set_role_idx(stringtable.len() as u32);
-                        stringtable
-                            .extend(&block.stringtable.s[pbf_relation.roles_sid[i] as usize]);
-                        stringtable.push(b'\0');
+                        let role = str::from_utf8(
+                            &block.stringtable.s[pbf_relation.roles_sid[i] as usize],
+                        )?;
+                        member.set_role_idx(stringtable.insert(role));
                     }
                     osmpbf::relation::MemberType::Way => {
                         let idx = match ways_id_to_idx.get(&memid) {
@@ -502,10 +505,10 @@ fn serialize_relations(
 
                         let mut member = members.add_way_member();
                         member.set_way_idx(idx);
-                        member.set_role_idx(stringtable.len() as u32);
-                        stringtable
-                            .extend(&block.stringtable.s[pbf_relation.roles_sid[i] as usize]);
-                        stringtable.push(b'\0');
+                        let role = str::from_utf8(
+                            &block.stringtable.s[pbf_relation.roles_sid[i] as usize],
+                        )?;
+                        member.set_role_idx(stringtable.insert(role));
                     }
                     osmpbf::relation::MemberType::Relation => {
                         let idx = match relations_id_to_idx.get(&memid) {
@@ -518,9 +521,10 @@ fn serialize_relations(
 
                         let mut member = members.add_relation_member();
                         member.set_relation_idx(idx);
-                        stringtable
-                            .extend(&block.stringtable.s[pbf_relation.roles_sid[i] as usize]);
-                        stringtable.push(b'\0');
+                        let role = str::from_utf8(
+                            &block.stringtable.s[pbf_relation.roles_sid[i] as usize],
+                        )?;
+                        member.set_role_idx(stringtable.insert(role));
                     }
                 }
             }
@@ -563,8 +567,8 @@ fn run() -> Result<(), Error> {
 
     // TODO: Would be nice not store all these strings in memory, but to flush them
     // from time to time to disk.
-    let mut stringtable = Vec::new();
-    stringtable.push(b'\0');
+    let mut stringtable = StringTable::new();
+    stringtable.push("");
 
     let block_index = build_block_index(args.arg_input.clone())?;
 
@@ -687,8 +691,7 @@ fn run() -> Result<(), Error> {
     };
 
     // Finalize data structures
-    stringtable.push(b'\0'); // add sentinel
-    builder.set_stringtable(&stringtable)?;
+    builder.set_stringtable(&stringtable.into_bytes())?;
 
     tags.close()?;
     infos.close()?;
