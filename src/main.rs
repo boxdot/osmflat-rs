@@ -2,8 +2,6 @@
 //
 // 1. Deduplicate strings: size of the stringtable for Berlin is 40M without
 //    dedup.
-// 2. Do not deserialize the whole pbf file twice. For the first time, it
-//    should be enough just to figure out what is inside primitiveblock.
 
 extern crate byteorder;
 extern crate colored;
@@ -38,7 +36,7 @@ use prost::Message;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::{self, BufReader, Cursor, ErrorKind, Read, Seek};
+use std::io::{self, BufReader, Cursor, ErrorKind, Read, Seek, SeekFrom};
 use std::path::Path;
 use std::rc::Rc;
 
@@ -106,17 +104,10 @@ impl BlockType {
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
-enum BlockCompression {
-    Uncompressed,
-    Zlib,
-}
-
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 struct BlockIndex {
     block_type: BlockType,
     blob_start: usize,
     blob_len: usize,
-    compression: BlockCompression,
 }
 
 struct OsmBlockIndexIterator {
@@ -154,48 +145,47 @@ impl OsmBlockIndexIterator {
 
         let blob_start = self.cursor;
         let blob_len = blob_header.datasize as usize;
+        self.cursor += blob_len;
 
-        // read blob
-        self.cursor += blob_header.datasize as usize;
-        self.file_buf.resize(blob_header.datasize as usize, 0);
-        self.reader.read_exact(&mut self.file_buf)?;
-        let blob = osmpbf::Blob::decode(&self.file_buf)?;
-
-        let compression;
-        let blob_data = if blob.raw.is_some() {
-            compression = BlockCompression::Uncompressed;
-            // use raw bytes
-            blob.raw.as_ref().unwrap()
-        } else if blob.zlib_data.is_some() {
-            compression = BlockCompression::Zlib;
-            // decompress zlib data
-            self.blob_buf.clear();
-            let data: &Vec<u8> = blob.zlib_data.as_ref().unwrap();
-            let mut decoder = ZlibDecoder::new(&data[..]);
-            decoder.read_to_end(&mut self.blob_buf)?;
-            &self.blob_buf
-        } else {
-            panic!("can only read raw or zlib compressed blob");
-        };
-        assert_eq!(
-            blob_data.len(),
-            blob.raw_size.unwrap_or_else(|| blob_data.len() as i32) as usize
-        );
-
-        let block_type = if blob_header.type_ == "OSMHeader" {
-            BlockType::Header
+        if blob_header.type_ == "OSMHeader" {
+            self.reader.seek(SeekFrom::Current(blob_len as i64))?;
+            Ok(BlockIndex {
+                block_type: BlockType::Header,
+                blob_start,
+                blob_len,
+            })
         } else if blob_header.type_ == "OSMData" {
-            BlockType::from_osmdata_blob(&blob_data[..])?
+            // read blob
+            self.file_buf.resize(blob_header.datasize as usize, 0);
+            self.reader.read_exact(&mut self.file_buf)?;
+            let blob = osmpbf::Blob::decode(&self.file_buf)?;
+
+            let blob_data = if blob.raw.is_some() {
+                // use raw bytes
+                blob.raw.as_ref().unwrap()
+            } else if blob.zlib_data.is_some() {
+                // decompress zlib data
+                self.blob_buf.clear();
+                let data: &Vec<u8> = blob.zlib_data.as_ref().unwrap();
+                let mut decoder = ZlibDecoder::new(&data[..]);
+                decoder.read_to_end(&mut self.blob_buf)?;
+                &self.blob_buf
+            } else {
+                panic!("can only read raw or zlib compressed blob");
+            };
+            assert_eq!(
+                blob_data.len(),
+                blob.raw_size.unwrap_or_else(|| blob_data.len() as i32) as usize
+            );
+
+            Ok(BlockIndex {
+                block_type: BlockType::from_osmdata_blob(&blob_data[..])?,
+                blob_start,
+                blob_len,
+            })
         } else {
             panic!("unknown blob type");
-        };
-
-        Ok(BlockIndex {
-            block_type,
-            compression,
-            blob_start,
-            blob_len,
-        })
+        }
     }
 }
 
@@ -205,25 +195,25 @@ fn read_block<F: Read + Seek, T: prost::Message + Default>(
 ) -> Result<T, Error> {
     reader.seek(io::SeekFrom::Start(idx.blob_start as u64))?;
 
-    // TODO: allocate buffers outside
+    // TODO: allocate buffers outside of the function
     let mut buf = Vec::new();
     buf.resize(idx.blob_len, 0);
     reader.read_exact(&mut buf)?;
     let blob = osmpbf::Blob::decode(&buf)?;
 
     let mut blob_buf = Vec::new();
-    let blob_data = match idx.compression {
-        BlockCompression::Uncompressed => blob.raw.as_ref().unwrap(),
-        BlockCompression::Zlib => {
-            // decompress zlib data
-            blob_buf.clear();
-            let data: &Vec<u8> = blob.zlib_data.as_ref().unwrap();
-            let mut decoder = ZlibDecoder::new(&data[..]);
-            decoder.read_to_end(&mut blob_buf)?;
-            &blob_buf
-        }
+    let blob_data = if blob.raw.is_some() {
+        blob.raw.as_ref().unwrap()
+    } else if blob.zlib_data.is_some() {
+        // decompress zlib data
+        blob_buf.clear();
+        let data: &Vec<u8> = blob.zlib_data.as_ref().unwrap();
+        let mut decoder = ZlibDecoder::new(&data[..]);
+        decoder.read_to_end(&mut blob_buf)?;
+        &blob_buf
+    } else {
+        return Err(format_err!("invalid input data: unknown compression"));
     };
-
     Ok(T::decode(blob_data)?)
 }
 
