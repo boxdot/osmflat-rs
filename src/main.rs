@@ -19,6 +19,7 @@ extern crate prost;
 extern crate prost_derive;
 #[macro_use]
 extern crate serde_derive;
+extern crate bytes;
 
 mod args;
 mod osmflat;
@@ -37,7 +38,7 @@ use prost::Message;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::{self, BufReader, ErrorKind, Read, Seek};
+use std::io::{self, BufReader, Cursor, ErrorKind, Read, Seek};
 use std::path::Path;
 use std::rc::Rc;
 
@@ -51,17 +52,55 @@ enum BlockType {
 }
 
 impl BlockType {
-    fn from_primitive_group(group: &osmpbf::PrimitiveGroup) -> Self {
-        if !group.nodes.is_empty() {
-            BlockType::Nodes
-        } else if group.dense.is_some() {
-            BlockType::DenseNodes
-        } else if !group.ways.is_empty() {
-            BlockType::Ways
-        } else if !group.relations.is_empty() {
-            BlockType::Relations
-        } else {
-            panic!("not supported group type")
+    /// Decode block type from PrimitiveBlock protobuf message
+    ///
+    /// This does not decode any fields, it just checks which tags are present
+    /// in PrimitiveGroup fields of the message.
+    ///
+    /// `blob` should contain decompressed data of an OSMData PrimitiveBlock.
+    ///
+    /// Note: We use public API of `prost` crate, which though is not exposed in
+    /// the crate and marked with comment that it should be only used from
+    /// `prost::Message`.
+    fn from_osmdata_blob(blob: &[u8]) -> Result<BlockType, io::Error> {
+        const PRIMITIVE_GROUP_TAG: u32 = 2;
+        const NODES_TAG: u32 = 1;
+        const DENSE_NODES_TAG: u32 = 2;
+        const WAY_STAG: u32 = 3;
+        const RELATIONS_TAG: u32 = 4;
+        const CHANGESETS_TAG: u32 = 5;
+
+        let mut cursor = Cursor::new(&blob[..]);
+        loop {
+            // decode fields of PrimitiveBlock
+            let (key, wire_type) = prost::encoding::decode_key(&mut cursor)?;
+            if key != PRIMITIVE_GROUP_TAG {
+                // primitive group
+                prost::encoding::skip_field(wire_type, &mut cursor)?;
+                continue;
+            }
+
+            // We found a PrimitiveGroup field. There could be several of them, but
+            // follwoing the specs of OSMPBF, all of them will have the same single
+            // optional field, which defines the type of the block.
+
+            // Decode the number of primitive groups.
+            let _ = prost::encoding::decode_varint(&mut cursor)?;
+            // Decode the tag of the first primitive group defining the type.
+            let (tag, _wire_type) = prost::encoding::decode_key(&mut cursor)?;
+            let block_type = match tag {
+                NODES_TAG => BlockType::Nodes,
+                DENSE_NODES_TAG => BlockType::DenseNodes,
+                WAY_STAG => BlockType::Ways,
+                RELATIONS_TAG => BlockType::Relations,
+                CHANGESETS_TAG => {
+                    panic!("found block containing unsupported changesets");
+                }
+                _ => {
+                    panic!("invalid input data: malformed primitive block");
+                }
+            };
+            return Ok(block_type);
         }
     }
 }
@@ -146,11 +185,7 @@ impl OsmBlockIndexIterator {
         let block_type = if blob_header.type_ == "OSMHeader" {
             BlockType::Header
         } else if blob_header.type_ == "OSMData" {
-            // TODO: Avoid decoding the full block. We need just the type of the primitive
-            // group.
-            let data = osmpbf::PrimitiveBlock::decode(blob_data)?;
-            assert_eq!(data.primitivegroup.len(), 1);
-            BlockType::from_primitive_group(&data.primitivegroup[0])
+            BlockType::from_osmdata_blob(&blob_data[..])?
         } else {
             panic!("unknown blob type");
         };
@@ -424,10 +459,10 @@ fn serialize_relations(
                                 .extend(&block.stringtable.s[pbf_relation.roles_sid[i] as usize]);
                             stringtable.push(b'\0');
                         } else {
-                            eprintln!(
-                                "Skipping relation member containing unresolved node {}",
-                                memid
-                            );
+                            // eprintln!(
+                            //     "Skipping relation member containing unresolved node {}",
+                            //     memid
+                            // );
                             continue;
                         }
                     }
@@ -440,17 +475,17 @@ fn serialize_relations(
                                 .extend(&block.stringtable.s[pbf_relation.roles_sid[i] as usize]);
                             stringtable.push(b'\0');
                         } else {
-                            eprintln!(
-                                "Skipping relation member containing unresolved way {}",
-                                memid
-                            );
+                            // eprintln!(
+                            //     "Skipping relation member containing unresolved way {}",
+                            //     memid
+                            // );
                             continue;
                         }
                     }
                     osmpbf::relation::MemberType::Relation => {
-                        eprintln!(
-                            "Skipping relation member containing relation => not implemented"
-                        );
+                        // eprintln!(
+                        //     "Skipping relation member containing relation => not implemented"
+                        // );
                         continue;
                     }
                 }
