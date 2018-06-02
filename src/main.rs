@@ -22,8 +22,10 @@ extern crate bytes;
 mod args;
 mod osmflat;
 mod osmpbf;
+mod stats;
 
 use args::parse_args;
+use stats::Stats;
 
 use byteorder::{ByteOrder, NetworkEndian};
 use colored::*;
@@ -302,7 +304,7 @@ fn serialize_dense_nodes(
     nodes: &mut flatdata::ExternalVector<osmflat::Node>,
     tags: &mut flatdata::ExternalVector<osmflat::Tag>,
     stringtable: &mut Vec<u8>,
-) -> Result<(), io::Error> {
+) -> Result<Stats, io::Error> {
     let group = &block.primitivegroup[0];
     let dense_nodes = group.dense.as_ref().unwrap();
 
@@ -345,7 +347,9 @@ fn serialize_dense_nodes(
             }
         }
     }
-    Ok(())
+    let mut stats = Stats::default();
+    stats.num_nodes = dense_nodes.id.len();
+    Ok(stats)
 }
 
 fn serialize_ways(
@@ -355,7 +359,8 @@ fn serialize_ways(
     tags: &mut flatdata::ExternalVector<osmflat::Tag>,
     nodes_index: &mut flatdata::ExternalVector<osmflat::NodeIndex>,
     stringtable: &mut Vec<u8>,
-) -> Result<(), io::Error> {
+) -> Result<Stats, io::Error> {
+    let mut stats = Stats::default();
     for group in &block.primitivegroup {
         for pbf_way in &group.ways {
             let mut way = ways.grow()?;
@@ -381,16 +386,19 @@ fn serialize_ways(
             for delta in &pbf_way.refs {
                 node_ref += delta;
                 let mut node_idx = nodes_index.grow()?;
-                debug_assert!(
-                    nodes_id_to_idx.get(&node_ref).is_some(),
-                    "invalid input data"
-                );
-                node_idx.set_value(nodes_id_to_idx[&node_ref]);
+                let idx = match nodes_id_to_idx.get(&node_ref) {
+                    Some(idx) => *idx,
+                    None => {
+                        stats.num_unresolved_node_ids += 1;
+                        osmflat::INVALID_IDX
+                    }
+                };
+                node_idx.set_value(idx);
             }
         }
+        stats.num_ways += group.ways.len();
     }
-
-    Ok(())
+    Ok(stats)
 }
 
 fn serialize_relations(
@@ -401,7 +409,8 @@ fn serialize_relations(
     relation_members: &mut flatdata::MultiVector<osmflat::IndexType32, osmflat::RelationMembers>,
     tags: &mut flatdata::ExternalVector<osmflat::Tag>,
     stringtable: &mut Vec<u8>,
-) -> Result<(), io::Error> {
+) -> Result<Stats, io::Error> {
+    let mut stats = Stats::default();
     for group in &block.primitivegroup {
         for pbf_relation in &group.relations {
             let mut relation = relations.grow()?;
@@ -441,48 +450,48 @@ fn serialize_relations(
 
                 match member_type.unwrap() {
                     osmpbf::relation::MemberType::Node => {
-                        if let Some(&idx) = nodes_id_to_idx.get(&memid) {
-                            let mut member = members.add_node_member();
-                            member.set_node_idx(idx);
-                            member.set_role_idx(stringtable.len() as u32);
-                            stringtable
-                                .extend(&block.stringtable.s[pbf_relation.roles_sid[i] as usize]);
-                            stringtable.push(b'\0');
-                        } else {
-                            // eprintln!(
-                            //     "Skipping relation member containing unresolved node {}",
-                            //     memid
-                            // );
-                            continue;
-                        }
+                        let idx = match nodes_id_to_idx.get(&memid) {
+                            Some(idx) => *idx,
+                            None => {
+                                stats.num_unresolved_node_ids += 1;
+                                osmflat::INVALID_IDX
+                            }
+                        };
+
+                        let mut member = members.add_node_member();
+                        member.set_node_idx(idx);
+                        member.set_role_idx(stringtable.len() as u32);
+                        stringtable
+                            .extend(&block.stringtable.s[pbf_relation.roles_sid[i] as usize]);
+                        stringtable.push(b'\0');
                     }
                     osmpbf::relation::MemberType::Way => {
-                        if let Some(&idx) = ways_id_to_idx.get(&memid) {
-                            let mut member = members.add_way_member();
-                            member.set_way_idx(idx);
-                            member.set_role_idx(stringtable.len() as u32);
-                            stringtable
-                                .extend(&block.stringtable.s[pbf_relation.roles_sid[i] as usize]);
-                            stringtable.push(b'\0');
-                        } else {
-                            // eprintln!(
-                            //     "Skipping relation member containing unresolved way {}",
-                            //     memid
-                            // );
-                            continue;
-                        }
+                        let idx = match ways_id_to_idx.get(&memid) {
+                            Some(idx) => *idx,
+                            None => {
+                                stats.num_unresolved_way_ids += 1;
+                                osmflat::INVALID_IDX
+                            }
+                        };
+
+                        let mut member = members.add_way_member();
+                        member.set_way_idx(idx);
+                        member.set_role_idx(stringtable.len() as u32);
+                        stringtable
+                            .extend(&block.stringtable.s[pbf_relation.roles_sid[i] as usize]);
+                        stringtable.push(b'\0');
                     }
                     osmpbf::relation::MemberType::Relation => {
-                        // eprintln!(
-                        //     "Skipping relation member containing relation => not implemented"
-                        // );
+                        // TODO: Not yet implemented
+                        stats.num_unresolved_rel_ids += 1;
                         continue;
                     }
                 }
             }
         }
+        stats.num_relations += group.relations.len();
     }
-    Ok(())
+    Ok(stats)
 }
 
 /// Reads the pbf file at the given path and builds an index of block types.
@@ -558,21 +567,22 @@ fn run() -> Result<(), Error> {
         format_err!("found nodes, only dense nodes are supported now")
     );
 
+    let mut stats = Stats::default();
+
     // Serialize dense nodes
-    let num_nodes = {
+    {
         let mut nodes = builder.start_nodes()?;
         let index = pbf_dense_nodes.ok_or_else(|| format_err!("missing dense nodes"))?;
         for idx in index {
             let block: osmpbf::PrimitiveBlock = read_block(&mut file, &idx)?;
-            serialize_dense_nodes(&block, &mut nodes, &mut tags, &mut stringtable)?;
+            stats += serialize_dense_nodes(&block, &mut nodes, &mut tags, &mut stringtable)?;
         }
         {
             let mut sentinel = nodes.grow()?;
             sentinel.set_tag_first_idx(tags.len() as u32);
         }
         nodes.close()?;
-        nodes.len() - 1
-    };
+    }
 
     // Build nodes index mapping: node id -> node position.
     let resource = storage
@@ -587,11 +597,11 @@ fn run() -> Result<(), Error> {
     }
 
     // Serialize ways
-    let num_ways = if let Some(index) = pbf_ways {
+    if let Some(index) = pbf_ways {
         let mut ways = builder.start_ways()?;
         for idx in index {
             let block: osmpbf::PrimitiveBlock = read_block(&mut file, &idx)?;
-            serialize_ways(
+            stats += serialize_ways(
                 &block,
                 &nodes_id_to_idx,
                 &mut ways,
@@ -606,9 +616,6 @@ fn run() -> Result<(), Error> {
             sentinel.set_ref_first_idx(nodes_index.len() as u32);
         }
         ways.close()?;
-        ways.len() - 1
-    } else {
-        0
     };
 
     // Build ways index mapping: way id -> way position.
@@ -624,13 +631,13 @@ fn run() -> Result<(), Error> {
     }
 
     // Serialize relations
-    let num_relations = if let Some(index) = pbf_relations {
+    if let Some(index) = pbf_relations {
         let mut relations = builder.start_relations()?;
         let mut relation_members = builder.start_relation_members()?;
 
         for idx in index {
             let block: osmpbf::PrimitiveBlock = read_block(&mut file, &idx)?;
-            serialize_relations(
+            stats += serialize_relations(
                 &block,
                 &nodes_id_to_idx,
                 &ways_id_to_idx,
@@ -643,9 +650,6 @@ fn run() -> Result<(), Error> {
 
         relations.close()?;
         relation_members.close()?;
-        relations.len()
-    } else {
-        0
     };
 
     // Finalize data structures
@@ -656,14 +660,7 @@ fn run() -> Result<(), Error> {
     infos.close()?;
     nodes_index.close()?;
 
-    println!(
-        r#"Serialized:
-  nodes: {},
-  ways: {},
-  relations: {}"#,
-        num_nodes, num_ways, num_relations
-    );
-
+    println!("{}", stats);
     Ok(())
 }
 
