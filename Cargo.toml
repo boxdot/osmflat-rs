@@ -24,6 +24,7 @@ prost-build = "*"
 [dev-dependencies]
 proptest = "0.6.0"
 png = "*"
+bresenham = "*"
 
 [[example]]
 name = "render"

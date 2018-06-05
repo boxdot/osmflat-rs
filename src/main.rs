@@ -94,6 +94,7 @@ fn serialize_header(
 /// Holds tags external vector and deduplicates tags.
 struct TagSerializer {
     tags: flatdata::ExternalVector<osmflat::Tag>,
+    tags_index: flatdata::ExternalVector<osmflat::TagIndex>,
     stringtable: Rc<RefCell<StringTable>>,
     dedup: HashMap<(u32, u32), u32>, // deduplication table: (key_idx, val_idx) -> pos
 }
@@ -105,6 +106,7 @@ impl TagSerializer {
     ) -> Result<Self, Error> {
         Ok(Self {
             tags: builder.start_tags()?,
+            tags_index: builder.start_tags_index()?,
             stringtable,
             dedup: HashMap::new(),
         })
@@ -115,9 +117,10 @@ impl TagSerializer {
         pbf_stringtable: &osmpbf::StringTable,
         k: u32,
         v: u32,
-    ) -> Result<u32, Error> {
+    ) -> Result<(), Error> {
         let key = str::from_utf8(&pbf_stringtable.s[k as usize])?;
         let val = str::from_utf8(&pbf_stringtable.s[v as usize])?;
+
         let key_idx = self.stringtable.borrow_mut().insert(key);
         let val_idx = self.stringtable.borrow_mut().insert(val);
 
@@ -133,11 +136,14 @@ impl TagSerializer {
             }
         };
 
-        Ok(idx)
+        let mut tag_index = self.tags_index.grow()?;
+        tag_index.set_value(idx);
+
+        Ok(())
     }
 
-    fn len(&self) -> usize {
-        self.tags.len()
+    fn next_index(&self) -> u32 {
+        self.tags_index.len() as u32
     }
 }
 
@@ -145,6 +151,9 @@ impl Drop for TagSerializer {
     fn drop(&mut self) {
         if let Err(e) = self.tags.close() {
             panic!("failed to close tags: {}", e);
+        }
+        if let Err(e) = self.tags_index.close() {
+            panic!("failed to close tags index: {}", e);
         }
     }
 }
@@ -181,7 +190,7 @@ fn serialize_dense_nodes(
         node.set_lon(lon_offset + (i64::from(granularity) * lon));
 
         if tags_offset < dense_nodes.keys_vals.len() {
-            node.set_tag_first_idx(tags.len() as u32);
+            node.set_tag_first_idx(tags.next_index());
             loop {
                 let k = dense_nodes.keys_vals[tags_offset];
                 if k == 0 {
@@ -215,7 +224,7 @@ fn serialize_ways(
             way.set_id(pbf_way.id);
 
             debug_assert_eq!(pbf_way.keys.len(), pbf_way.vals.len(), "invalid input data");
-            way.set_tag_first_idx(tags.len() as u32);
+            way.set_tag_first_idx(tags.next_index());
 
             for i in 0..pbf_way.keys.len() {
                 tags.serialize(&block.stringtable, pbf_way.keys[i], pbf_way.vals[i])?;
@@ -282,7 +291,7 @@ fn serialize_relations(
                 pbf_relation.vals.len(),
                 "invalid input data"
             );
-            relation.set_tag_first_idx(tags.len() as u32);
+            relation.set_tag_first_idx(tags.next_index());
             for i in 0..pbf_relation.keys.len() {
                 tags.serialize(
                     &block.stringtable,
@@ -430,7 +439,7 @@ fn run() -> Result<(), Error> {
         }
         {
             let mut sentinel = nodes.grow()?;
-            sentinel.set_tag_first_idx(tags.len() as u32);
+            sentinel.set_tag_first_idx(tags.next_index());
         }
         nodes.close()?;
     }
@@ -454,7 +463,7 @@ fn run() -> Result<(), Error> {
         }
         {
             let mut sentinel = ways.grow()?;
-            sentinel.set_tag_first_idx(tags.len() as u32);
+            sentinel.set_tag_first_idx(tags.next_index());
             sentinel.set_ref_first_idx(nodes_index.len() as u32);
         }
         ways.close()?;
@@ -487,7 +496,7 @@ fn run() -> Result<(), Error> {
         }
         {
             let mut sentinel = relations.grow()?;
-            sentinel.set_tag_first_idx(tags.len() as u32);
+            sentinel.set_tag_first_idx(tags.next_index());
         }
 
         relations.close()?;

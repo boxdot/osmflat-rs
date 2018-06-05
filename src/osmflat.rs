@@ -37,7 +37,7 @@ namespace osm { @explicit_reference( Header.required_feature_first_idx, stringta
     tag_first_idx: u32 : 32;
     info_idx: u32 : 32;
 } }
-namespace osm { @explicit_reference( Node.tag_first_idx, tags )
+namespace osm { @explicit_reference( Node.tag_first_idx, tags_index )
     @explicit_reference( Node.info_idx, infos )
     nodes: vector<Node>; }"#;
             pub const WAYS: &str = r#"namespace osm { struct Way {
@@ -46,7 +46,7 @@ namespace osm { @explicit_reference( Node.tag_first_idx, tags )
     ref_first_idx: u32 : 32;
     info_idx: u32 : 32;
 } }
-namespace osm { @explicit_reference( Way.tag_first_idx, tags )
+namespace osm { @explicit_reference( Way.tag_first_idx, tags_index )
     @explicit_reference( Way.info_idx, infos )
     @explicit_reference( Way.ref_first_idx, nodes_index )
     ways: vector<Way>; }"#;
@@ -55,7 +55,7 @@ namespace osm { @explicit_reference( Way.tag_first_idx, tags )
     tag_first_idx: u32 : 32;
     info_idx: u32 : 32;
 } }
-namespace osm { @explicit_reference( Relation.tag_first_idx, tags )
+namespace osm { @explicit_reference( Relation.tag_first_idx, tags_index )
     @explicit_reference( Relation.info_idx, infos )
     relations: vector<Relation>; }"#;
             pub const RELATION_MEMBERS: &str = r#"namespace osm { struct NodeMember {
@@ -95,10 +95,26 @@ namespace osm { @explicit_reference( Tag.key_idx, stringtable )
 } }
 namespace osm { @explicit_reference( Info.user_idx, stringtable )
     infos: vector<Info>; }"#;
-            pub const NODES_INDEX: &str = r#"namespace osm { struct NodeIndex {
+            pub const TAGS_INDEX: &str = r#"namespace osm { /**
+ * A struct indexing a tag.
+ */
+struct TagIndex {
     value: u32 : 32;
 } }
-namespace osm { nodes_index: vector<NodeIndex>; }"#;
+namespace osm { /**
+     * Index aligned with nodes + ways + relations to index ranges of tags.
+     */
+    tags_index: vector<TagIndex>; }"#;
+            pub const NODES_INDEX: &str = r#"namespace osm { /**
+ * A struct indexing a node.
+ */
+struct NodeIndex {
+    value: u32 : 32;
+} }
+namespace osm { /**
+     * Index aligned with ways to index ranges of nodes.
+     */
+    nodes_index: vector<NodeIndex>; }"#;
             pub const STRINGTABLE: &str = r#"namespace osm { /**
      * List of strings separated by \0.
      */
@@ -108,7 +124,16 @@ namespace osm { nodes_index: vector<NodeIndex>; }"#;
     pub mod structs {
         pub const INDEX_TYPE32: &str =
             r#"namespace _builtin.multivector { struct IndexType32 { value : u64 : 32; } }"#;
-        pub const NODE_INDEX: &str = r#"namespace osm { struct NodeIndex {
+        pub const NODE_INDEX: &str = r#"namespace osm { /**
+ * A struct indexing a node.
+ */
+struct NodeIndex {
+    value: u32 : 32;
+} }"#;
+        pub const TAG_INDEX: &str = r#"namespace osm { /**
+ * A struct indexing a tag.
+ */
+struct TagIndex {
     value: u32 : 32;
 } }"#;
         pub const INFO: &str = r#"namespace osm { struct Info {
@@ -232,11 +257,21 @@ namespace osm { struct Info {
     user_idx: u32 : 32;
     visible: bool : 1;
 } }
-namespace osm { struct NodeIndex {
+namespace osm { /**
+ * A struct indexing a tag.
+ */
+struct TagIndex {
+    value: u32 : 32;
+} }
+namespace osm { /**
+ * A struct indexing a node.
+ */
+struct NodeIndex {
     value: u32 : 32;
 } }
 namespace osm { const u32 INVALID_IDX = 0; }
-namespace osm { @bound_implicitly(Relations: relations, relation_members)
+namespace osm { @bound_implicitly(Ways: ways, nodes_index)
+@bound_implicitly(Relations: relations, relation_members)
 archive Osm {
     @explicit_reference( Header.required_feature_first_idx, stringtable )
     @explicit_reference( Header.optional_feature_first_idx, stringtable )
@@ -245,16 +280,16 @@ archive Osm {
     @explicit_reference( Header.osmosis_replication_base_url_idx, stringtable )
     header: Header;
 
-    @explicit_reference( Node.tag_first_idx, tags )
+    @explicit_reference( Node.tag_first_idx, tags_index )
     @explicit_reference( Node.info_idx, infos )
     nodes: vector<Node>;
 
-    @explicit_reference( Way.tag_first_idx, tags )
+    @explicit_reference( Way.tag_first_idx, tags_index )
     @explicit_reference( Way.info_idx, infos )
     @explicit_reference( Way.ref_first_idx, nodes_index )
     ways: vector<Way>;
 
-    @explicit_reference( Relation.tag_first_idx, tags )
+    @explicit_reference( Relation.tag_first_idx, tags_index )
     @explicit_reference( Relation.info_idx, infos )
     relations: vector<Relation>;
 
@@ -273,6 +308,14 @@ archive Osm {
     @explicit_reference( Info.user_idx, stringtable )
     infos: vector<Info>;
 
+    /**
+     * Index aligned with nodes + ways + relations to index ranges of tags.
+     */
+    tags_index: vector<TagIndex>;
+
+    /**
+     * Index aligned with ways to index ranges of nodes.
+     */
     nodes_index: vector<NodeIndex>;
 
     /**
@@ -285,10 +328,24 @@ archive Osm {
 
 pub const INVALID_IDX: u32 = 0;
 
+///
+/// A struct indexing a node.
+///
 define_struct!(
     NodeIndex,
     NodeIndexMut,
     schema::structs::NODE_INDEX,
+    4,
+    (value, set_value, u32, 0, 32)
+);
+
+///
+/// A struct indexing a tag.
+///
+define_struct!(
+    TagIndex,
+    TagIndexMut,
+    schema::structs::TAG_INDEX,
     4,
     (value, set_value, u32, 0, 32)
 );
@@ -467,6 +524,8 @@ define_archive!(Osm, OsmBuilder,
         Tag, schema::resources::osm::TAGS),
     (infos, set_infos, start_infos,
         Info, schema::resources::osm::INFOS),
+    (tags_index, set_tags_index, start_tags_index,
+        TagIndex, schema::resources::osm::TAGS_INDEX),
     (nodes_index, set_nodes_index, start_nodes_index,
         NodeIndex, schema::resources::osm::NODES_INDEX);
     // multivector resources

@@ -21,10 +21,6 @@ struct Header {
     osmosis_replication_base_url_idx: u32 : 32;
 }
 
-struct NodeIndex {
-    value: u32 : 32;
-}
-
 struct Info {
     version: i32 : 32;
     timestamp: i64 : 64;
@@ -47,11 +43,25 @@ struct Node {
     info_idx: u32 : 32;
 }
 
+/**
+ * A struct indexing a node.
+ */
+struct NodeIndex {
+    value: u32 : 32;
+}
+
 struct Way {
     id: i64 : 64;
     tag_first_idx: u32 : 32;
     ref_first_idx: u32 : 32;
     info_idx: u32 : 32;
+}
+
+/**
+ * A struct indexing a tag.
+ */
+struct TagIndex {
+    value: u32 : 32;
 }
 
 struct NodeMember {
@@ -75,6 +85,7 @@ struct Relation {
     info_idx: u32 : 32;
 }
 
+@bound_implicitly(Ways: ways, nodes_index)
 @bound_implicitly(Relations: relations, relation_members)
 archive Osm {
     @explicit_reference( Header.required_feature_first_idx, stringtable )
@@ -84,16 +95,16 @@ archive Osm {
     @explicit_reference( Header.osmosis_replication_base_url_idx, stringtable )
     header: Header;
 
-    @explicit_reference( Node.tag_first_idx, tags )
+    @explicit_reference( Node.tag_first_idx, tags_index )
     @explicit_reference( Node.info_idx, infos )
     nodes: vector<Node>;
 
-    @explicit_reference( Way.tag_first_idx, tags )
+    @explicit_reference( Way.tag_first_idx, tags_index )
     @explicit_reference( Way.info_idx, infos )
     @explicit_reference( Way.ref_first_idx, nodes_index )
     ways: vector<Way>;
 
-    @explicit_reference( Relation.tag_first_idx, tags )
+    @explicit_reference( Relation.tag_first_idx, tags_index )
     @explicit_reference( Relation.info_idx, infos )
     relations: vector<Relation>;
 
@@ -112,6 +123,14 @@ archive Osm {
     @explicit_reference( Info.user_idx, stringtable )
     infos: vector<Info>;
 
+    /**
+     * Index aligned with nodes + ways + relations to index ranges of tags.
+     */
+    tags_index: vector<TagIndex>;
+
+    /**
+     * Index aligned with ways to index ranges of nodes.
+     */
     nodes_index: vector<NodeIndex>;
 
     /**
