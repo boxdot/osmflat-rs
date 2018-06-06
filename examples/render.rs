@@ -19,10 +19,26 @@ use std::path::Path;
 use std::rc::Rc;
 use std::str;
 
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, PartialOrd)]
 struct GeoCoord {
     lat: f64,
     lon: f64,
+}
+
+impl GeoCoord {
+    fn min(self, other: Self) -> Self {
+        Self {
+            lat: self.lat.min(other.lat),
+            lon: self.lon.min(other.lon),
+        }
+    }
+
+    fn max(self, other: Self) -> Self {
+        Self {
+            lat: self.lat.max(other.lat),
+            lon: self.lon.max(other.lon),
+        }
+    }
 }
 
 impl<N: Deref<Target = osmflat::Node>> convert::From<N> for GeoCoord {
@@ -72,21 +88,9 @@ impl Image {
         self.data[i + 2] = c.b;
         self.data[i + 3] = c.a;
     }
-
-    fn data(&self) -> &[u8] {
-        &self.data
-    }
-
-    fn width(&self) -> u32 {
-        self.w
-    }
-
-    fn height(&self) -> u32 {
-        self.h
-    }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct MapTransform {
     width: u32,
     height: u32,
@@ -109,11 +113,42 @@ impl MapTransform {
     }
 
     fn transform(&self, coord: GeoCoord) -> (isize, isize) {
-        let res = (
+        (
             ((coord.lon - self.min_x) / self.map_w * self.width as f64) as isize,
             ((1f64 - (coord.lat - self.min_y) / self.map_h) * self.height as f64) as isize,
-        );
-        res
+        )
+    }
+}
+
+#[derive(Clone)]
+struct NodesIterator<'a> {
+    nodes: flatdata::ArrayView<'a, osmflat::Node>,
+    nodes_index: flatdata::ArrayView<'a, osmflat::NodeIndex>,
+    next: usize,
+    end: usize,
+}
+
+impl<'a> NodesIterator<'a> {
+    fn from_way(archive: &'a osmflat::Osm, way: &osmflat::Way, next_way: &osmflat::Way) -> Self {
+        Self {
+            nodes: archive.nodes(),
+            nodes_index: archive.nodes_index(),
+            next: way.ref_first_idx() as usize,
+            end: next_way.ref_first_idx() as usize,
+        }
+    }
+}
+
+impl<'a> Iterator for NodesIterator<'a> {
+    type Item = flatdata::Handle<'a, osmflat::Node>;
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.next < self.end {
+            let idx = self.next;
+            self.next += 1;
+            Some(self.nodes.at(self.nodes_index.at(idx).value() as usize))
+        } else {
+            None
+        }
     }
 }
 
@@ -159,69 +194,56 @@ fn way_filter(
     false
 }
 
-fn render(archive: &osmflat::Osm, image: &mut Image) {
-    let nodes = archive.nodes();
-    let nodes_index = archive.nodes_index();
-
+fn render(archive: &osmflat::Osm, width: u32) -> Image {
     let ways = archive.ways();
     let tags_index = archive.tags_index();
     let tags = archive.tags();
     let strings = str::from_utf8(archive.stringtable())
         .expect("stringtable contains invalid utf8 characters");
 
-    let get_roads = || {
-        ways.iter()
-            .zip(ways.iter().skip(1))
-            .filter(|(way, next_way)| way_filter(&*way, &*next_way, &tags_index, &tags, strings))
-    };
+    let roads = ways.iter()
+        .zip(ways.iter().skip(1))
+        .filter(|(way, next_way)| way_filter(&*way, &*next_way, &tags_index, &tags, strings));
 
     // compute extent
+    let mut coords = roads.clone().flat_map(|(way, next_way)| {
+        NodesIterator::from_way(archive, &*way, &*next_way).map(GeoCoord::from)
+    });
+    let first_coord = coords.next().expect("no roads found");
+    let (min, max) = coords.fold((first_coord, first_coord), |(min, max), coord| {
+        (min.min(coord), max.max(coord))
+    });
 
-    let mut roads = get_roads();
-    let (road, _) = roads.next().expect("no roads found");
-    let first_road_node = nodes.at(nodes_index.at(road.ref_first_idx() as usize).value() as usize);
-    let mut min = GeoCoord::from(first_road_node);
-    let mut max = min;
+    // compute ratio and height
+    let ratio = 360. / 180. * (max.lat - min.lat) / (max.lon - min.lon);
+    let height = (width as f64 * ratio) as u32;
 
-    for (way, next_way) in get_roads() {
-        let start_node_idx = way.ref_first_idx();
-        let end_node_idx = next_way.ref_first_idx();
-        for node_idx in start_node_idx..end_node_idx {
-            let node = nodes.at(nodes_index.at(node_idx as usize).value() as usize);
-            let coord = GeoCoord::from(node);
-            if coord.lon < min.lon {
-                min.lon = coord.lon;
-            } else if max.lon < coord.lon {
-                max.lon = coord.lon;
-            }
-            if coord.lat < min.lat {
-                min.lat = coord.lat;
-            } else if max.lat < coord.lat {
-                max.lat = coord.lat;
-            }
+    // create world -> raster transformation
+    let t = MapTransform::new(width - 1, height - 1, min, max);
+
+    // draw
+    let mut image = Image::new(width, height);
+
+    let lines = roads.flat_map(|(way, next_way)| {
+        let raster_coords = NodesIterator::from_way(archive, &*way, &*next_way)
+            .map(GeoCoord::from)
+            .map(|coord| t.transform(coord));
+        raster_coords.clone().zip(raster_coords.skip(1))
+    });
+
+    for (from, to) in lines {
+        for (x, y) in Bresenham::new(from, to) {
+            image.set(x as u32, y as u32, Color::new(0, 0, 0, 255));
         }
     }
 
-    let t = MapTransform::new(image.width() - 1, image.height() - 1, min, max);
-
-    for (way, next_way) in get_roads() {
-        let start_node_idx = way.ref_first_idx();
-        let end_node_idx = next_way.ref_first_idx();
-        for node_idx in start_node_idx..(end_node_idx - 1) {
-            let from = nodes.at(nodes_index.at(node_idx as usize).value() as usize);
-            let to = nodes.at(nodes_index.at((node_idx + 1) as usize).value() as usize);
-
-            let from_raster = t.transform(GeoCoord::from(from));
-            let to_raster = t.transform(GeoCoord::from(to));
-
-            for (x, y) in Bresenham::new(from_raster, to_raster) {
-                image.set(x as u32, y as u32, Color::new(0, 0, 0, 255));
-            }
-        }
-    }
+    image
 }
 
 fn main() -> Result<(), Error> {
+    // Lets do 4k :D
+    const WIDTH: u32 = 4 * 1080;
+
     let mut args = env::args().skip(1);
     let osmflat_path = args.next().unwrap();
     let image_path = args.next().unwrap();
@@ -229,17 +251,16 @@ fn main() -> Result<(), Error> {
     let storage = Rc::new(RefCell::new(FileResourceStorage::new(osmflat_path.into())));
     let archive = osmflat::Osm::open(storage)?;
 
-    let mut image = Image::new(4 * 1000, 4 * 800);
-    render(&archive, &mut image);
+    let image = render(&archive, WIDTH);
 
     let path = Path::new(&image_path);
     let file = File::create(path)?;
     let buf = BufWriter::new(file);
 
-    let mut encoder = png::Encoder::new(buf, 4 * 1000, 4 * 800);
+    let mut encoder = png::Encoder::new(buf, WIDTH, image.h);
     encoder.set(png::ColorType::RGBA).set(png::BitDepth::Eight);
     let mut writer = encoder.write_header()?;
 
-    writer.write_image_data(image.data())?;
+    writer.write_image_data(&image.data[..])?;
     Ok(())
 }
