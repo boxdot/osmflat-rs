@@ -1,4 +1,4 @@
-# osmflat
+# osmflat [![travis status]][travis]
 
 ![berlin-with-some-parks-and-rivers](examples/berlin-with-some-parks-and-rivers.jpg)
 
@@ -75,6 +75,10 @@ archive based on the [latest][latest-berlin-map] Berlin OSM data.
  * MIT License ([LICENSE-MIT](LICENSE-MIT) or
    http://opensource.org/licenses/MIT)
 
+Note that [src/proto/fileformat.proto](src/proto/fileformat.proto) and
+[src/proto/osmformat.proto](src/proto/osmformat.proto) come from OSM-binary
+under the LGPLv3.
+
 ### Contribution
 
 Unless you explicitly state otherwise, any contribution intentionally submitted
@@ -87,3 +91,7 @@ shall be dual licensed as above, without any additional terms or conditions.
 [PBF format]: https://wiki.openstreetmap.org/wiki/PBF_Format
 [examples]: examples
 [latest-berlin-map]: http://download.geofabrik.de/europe/germany/berlin.html
+
+[travis]: https://travis-ci.org/boxdot/flatdata-rs
+[travis status]: https://travis-ci.org/boxdot/flatdata-rs.svg?branch=master
+[latest version]: https://img.shields.io/crates/v/flatdata.svg
