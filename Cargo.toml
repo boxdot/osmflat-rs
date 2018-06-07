@@ -26,5 +26,9 @@ proptest = "0.6.0"
 png = "*"
 bresenham = "*"
 
+[[bin]]
+name = "osmflatc"
+path = "src/main.rs"
+
 [[example]]
 name = "render"

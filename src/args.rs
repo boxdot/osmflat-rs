@@ -4,7 +4,7 @@ const USAGE: &str = "
 Compiler of Open Street Data from osm.pbf format to osm.flatdata format.
 
 Usage:
-  osmflat <input> <output>
+  osmflatc <input> <output>
 ";
 
 #[derive(Debug, Deserialize)]
