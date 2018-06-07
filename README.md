@@ -75,6 +75,10 @@ archive based on the [latest][latest-berlin-map] Berlin OSM data.
  * MIT License ([LICENSE-MIT](LICENSE-MIT) or
    http://opensource.org/licenses/MIT)
 
+Note that [src/proto/fileformat.proto](src/proto/fileformat.proto) and
+[src/proto/osmformat.proto](src/proto/osmformat.proto) come from OSM-binary
+under the LGPLv3.
+
 ### Contribution
 
 Unless you explicitly state otherwise, any contribution intentionally submitted
