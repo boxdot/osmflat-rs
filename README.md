@@ -1,4 +1,4 @@
-# osmflat
+# osmflat [![travis status]][travis]
 
 ![berlin-with-some-parks-and-rivers](examples/berlin-with-some-parks-and-rivers.jpg)
 
@@ -91,3 +91,7 @@ shall be dual licensed as above, without any additional terms or conditions.
 [PBF format]: https://wiki.openstreetmap.org/wiki/PBF_Format
 [examples]: examples
 [latest-berlin-map]: http://download.geofabrik.de/europe/germany/berlin.html
+
+[travis]: https://travis-ci.org/boxdot/flatdata-rs
+[travis status]: https://travis-ci.org/boxdot/flatdata-rs.svg?branch=master
+[latest version]: https://img.shields.io/crates/v/flatdata.svg
