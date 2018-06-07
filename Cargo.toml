@@ -2,6 +2,12 @@
 name = "osmflat"
 version = "0.1.0"
 authors = ["boxdot <d@zerovolt.org>"]
+license = "MIT/Apache-2.0"
+description = "Flat OpenStreetMap (OSM) data format with very efficient random access pattern through memory mapped files."
+repository = "https://github.com/boxdot/osmflat-rs"
+keywords = ["serialization", "osm", "openstreetmap", "flatdata"]
+categories = ["encoding"]
+readme = "README.md"
 
 [dependencies]
 bytes = "0.4"
