@@ -22,9 +22,10 @@ cargo run osmflatc -- input.osm.pbf output.osm.flatdata
 ```
 
 The output is a flatdata archive, which is a directory consisting of several
-files. The schema is also part of the archive. It checked every an archive is
-opened for changes. This guarantees that an archive is produced by the same
-software as we use for opening it. The archive data is not compressed.
+files. The schema is also part of the archive. It is checked every time the
+archive is opened. This guarantees that the compiler which was used to produce
+the archive fits to the schema used for reading it. The archive data is not
+compressed.
 
 ## Using data
 
