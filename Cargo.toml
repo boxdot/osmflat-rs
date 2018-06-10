@@ -10,19 +10,22 @@ categories = ["encoding"]
 readme = "README.md"
 
 [dependencies]
+byteorder = "1.2"
 bytes = "0.4"
+colored = "1.6"
 docopt = "1.0"
+failure = "0.1"
 flatdata = "0.1.3"
+flate2 = "1.0"
+itertools = "0.7"
+log = "0.4"
+pbr = "1.0"
 prost = "0.3"
 prost-derive = "0.3"
 prost-types = "0.3"
 serde = "1.0"
 serde_derive = "1.0"
-byteorder = "1.2"
-flate2 = "1.0"
-failure = "0.1"
-colored = "1.6"
-itertools = "0.7"
+stderrlog = "0.4"
 
 [build-dependencies]
 prost-build = "0.3"

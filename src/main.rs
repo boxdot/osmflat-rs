@@ -1,4 +1,5 @@
 extern crate byteorder;
+extern crate bytes;
 extern crate colored;
 extern crate docopt;
 #[macro_use]
@@ -7,15 +8,18 @@ extern crate flate2;
 #[macro_use]
 extern crate flatdata;
 extern crate itertools;
+#[macro_use]
+extern crate log;
 extern crate prost;
 #[macro_use]
 extern crate prost_derive;
-#[macro_use]
-extern crate serde_derive;
-extern crate bytes;
+extern crate pbr;
 #[cfg(test)]
 #[macro_use]
 extern crate proptest;
+#[macro_use]
+extern crate serde_derive;
+extern crate stderrlog;
 
 mod args;
 mod osmflat;
@@ -32,6 +36,7 @@ use colored::*;
 use failure::Error;
 use flatdata::{ArchiveBuilder, FileResourceStorage};
 use itertools::Itertools;
+use pbr::ProgressBar;
 
 use std::cell::RefCell;
 use std::collections::{hash_map, HashMap};
@@ -375,6 +380,12 @@ fn serialize_relations(
 
 fn run() -> Result<(), Error> {
     let args = parse_args();
+    stderrlog::new()
+        .module(module_path!())
+        .timestamp(stderrlog::Timestamp::Second)
+        .verbosity(args.flag_verbose + 2)
+        .init()
+        .unwrap();
 
     let storage = Rc::new(RefCell::new(FileResourceStorage::new(
         args.arg_output.clone().into(),
@@ -388,7 +399,9 @@ fn run() -> Result<(), Error> {
     let mut tags = TagSerializer::new(&mut builder, stringtable.clone())?;
     let mut infos = builder.start_infos()?;
     let mut nodes_index = builder.start_nodes_index()?;
+    info!("Initialized new osmflat archive at: {}", &args.arg_output);
 
+    info!("Building index of PBF blocks...");
     let block_index = build_block_index(args.arg_input.clone())?;
 
     // TODO: move out into a function
@@ -407,6 +420,7 @@ fn run() -> Result<(), Error> {
             BlockType::Relations => pbf_relations = Some(blocks),
         }
     }
+    info!("PBF block index built.");
 
     let mut file = File::open(args.arg_input)?;
 
@@ -419,6 +433,7 @@ fn run() -> Result<(), Error> {
         index.next().is_none(),
         "found multiple header blocks, which is not supported."
     );
+    info!("Header written.");
 
     // Serialize nodes
     // TODO: Implement!
@@ -432,21 +447,33 @@ fn run() -> Result<(), Error> {
     // Serialize dense nodes
     let mut nodes_id_to_idx: HashMap<i64, u32> = HashMap::new();
     if let Some(index) = pbf_dense_nodes {
+        let index: Vec<_> = index.collect();
+
+        let mut pb = ProgressBar::new(index.len() as u64);
+        pb.message("Converting dense nodes...");
         let mut nodes = builder.start_nodes()?;
         for idx in index {
             let block: osmpbf::PrimitiveBlock = read_block(&mut file, &idx)?;
             stats += serialize_dense_nodes(&block, &mut nodes, &mut nodes_id_to_idx, &mut tags)?;
+            pb.inc();
         }
         {
             let mut sentinel = nodes.grow()?;
             sentinel.set_tag_first_idx(tags.next_index());
         }
         nodes.close()?;
+        pb.finish();
     }
+    info!("Dense nodes converted.");
 
     // Serialize ways
     let mut ways_id_to_idx: HashMap<i64, u32> = HashMap::new();
     if let Some(index) = pbf_ways {
+        let index: Vec<_> = index.collect();
+
+        let mut pb = ProgressBar::new(index.len() as u64);
+        pb.message("Converting ways...");
+
         let mut ways = builder.start_ways()?;
         ways.grow()?; // index 0 is reserved for invalid way
 
@@ -460,6 +487,7 @@ fn run() -> Result<(), Error> {
                 &mut tags,
                 &mut nodes_index,
             )?;
+            pb.inc();
         }
         {
             let mut sentinel = ways.grow()?;
@@ -467,14 +495,23 @@ fn run() -> Result<(), Error> {
             sentinel.set_ref_first_idx(nodes_index.len() as u32);
         }
         ways.close()?;
+        pb.finish();
     };
+    info!("Ways converted.");
 
     // Serialize relations
     if let Some(index) = pbf_relations {
+        let index: Vec<_> = index.collect();
+
+        info!("Building relations index...");
+
         // We need to build the index of relation ids first, since relations can refer
         // again to relations.
-        let index: Vec<_> = index.collect();
         let relations_id_to_idx = build_relations_index(&mut file, index.iter())?;
+        info!("Relations index built.");
+
+        let mut pb = ProgressBar::new(index.len() as u64);
+        pb.message("Converting relations...");
 
         let mut relations = builder.start_relations()?;
         relations.grow()?; // index 0 is reserved for invalid relation
@@ -493,6 +530,7 @@ fn run() -> Result<(), Error> {
                 &mut tags,
                 &stringtable,
             )?;
+            pb.inc();
         }
         {
             let mut sentinel = relations.grow()?;
@@ -501,17 +539,22 @@ fn run() -> Result<(), Error> {
 
         relations.close()?;
         relation_members.close()?;
+        pb.finish();
     };
+    info!("Relations converted.");
 
     // Finalize data structures
     drop(tags); // drop the reference to stringtable
 
+    info!("Writing stringtable to disk...");
     let stringtable = Rc::try_unwrap(stringtable)
         .unwrap_or_else(|_| panic!("logic error: stringtable is still in use in other place"));
     builder.set_stringtable(&stringtable.into_inner().into_bytes())?;
 
     infos.close()?;
     nodes_index.close()?;
+
+    info!("osmflat archive built.");
 
     println!("{}", stats);
     Ok(())

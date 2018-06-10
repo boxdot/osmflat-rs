@@ -27,7 +27,7 @@ impl fmt::Display for Stats {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         write!(
             f,
-            r#"Serialized:
+            r#"Converted:
   nodes:        {}
   ways:         {}
   relations:    {}
