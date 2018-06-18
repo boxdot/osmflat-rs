@@ -14,6 +14,7 @@ use docopt::Docopt;
 use failure::Error;
 use flatdata::{Archive, FileResourceStorage};
 use haversine::{distance, Location};
+use itertools::Itertools;
 use svg::node::element::{Group, Polygon, Polyline};
 use svg::Document;
 
@@ -284,7 +285,7 @@ fn generate(
     let strings = str::from_utf8(archive.stringtable())
         .expect("stringtable contains invalid utf8 characters");
 
-    let multipolygons_indexes = relations
+    let multipolygons = relations
         .iter()
         .zip(relations.iter().skip(1))
         .enumerate()
@@ -304,12 +305,21 @@ fn generate(
                 }
                 if key == "landuse"
                     && (val == "forest" || val == "grass" || val == "recreation_ground")
+                    || (key == "leisure" && val == "park")
                 {
                     is_green = true;
                 }
                 if (key == "natural" && val == "water") || (key == "waterway" && val == "river") {
                     is_wet = true;
                 }
+
+                if relation.id() == 7643526 {
+                    println!("{}: {} -> {}", key, val, relation_idx);
+                }
+            }
+
+            if relation.id() == 7643526 {
+                println!("is_multipolygon: {}, is_green: {}", is_multipolygon, is_green);
             }
 
             if is_multipolygon && is_green {
@@ -394,22 +404,16 @@ fn generate(
         }
     }
 
-    for layer in multipolygons_indexes {
-        let mut points: Vec<(isize, isize)> = Vec::new();
-        for mut relation_member in relation_members.at(layer.relation_idx as usize) {
-            let mut p = match *relation_member {
+    for multipolygon in multipolygons {
+        let mut all_points: Vec<Vec<(isize, isize)>> = Vec::new();
+        for relation_member in relation_members.at(multipolygon.relation_idx as usize) {
+            let points = match *relation_member {
                 osmflat::RelationMembers::RelationMember(ref relation_member) => {
-                    // if relation_member.relation_idx() == layer.relation_idx {
-                    // // println!("relation_member {} belonging to multipolygon  {}",
-                    // relation_member_idx, multipolygon_idx); }
                     vec![]
                 }
                 osmflat::RelationMembers::WayMember(ref way_member) => {
-                    //println!("{}", way_member.relation_idx());
                     let role = substring(strings, way_member.role_idx());
                     if role == "outer" {
-                        // println!("way_member {} belonging to relation {}", relation_member_idx,
-                        // multipolygon_idx);
                         let way = ways.at(way_member.way_idx() as usize);
                         let next_way = ways.at(way_member.way_idx() as usize + 1);
                         let points: Vec<(isize, isize)> = NodesIterator::from_way(
@@ -425,8 +429,6 @@ fn generate(
                 osmflat::RelationMembers::NodeMember(ref node_member) => {
                     let role = substring(strings, node_member.role_idx());
                     if role == "outer" {
-                        // println!("node_member {} belonging to relation {}", relation_member_idx,
-                        // multipolygon_idx);
                         let node = nodes.at(node_member.node_idx() as usize);
                         vec![t.transform(GeoCoord::from(node))]
                     } else {
@@ -434,21 +436,41 @@ fn generate(
                     }
                 }
             };
-            points.append(&mut p);
+
+            all_points.push(points);
         }
 
-        let v: Vec<String> = points.iter().map(|(x, y)| format!("{},{}", x, y)).collect();
-
-        match layer.layer_type {
-            LayerType::Park => {
-                let polygon = Polygon::new().set("points", v.join(" "));
-                park_group = park_group.add(polygon);
+        let acc: Vec<Vec<(isize, isize)>> = vec![vec![]];
+        let polygons = all_points.into_iter().fold(acc, |mut acc, mut points| {
+            let last_acc_point = acc.last().and_then(|points| {
+                points.last().map(|p| *p)
+            });
+            let first_point = points.first().map(|p| *p);
+            
+            if last_acc_point == first_point {
+                let size = acc.len();
+                acc[size-1].append(&mut points);
+            } else {
+                acc.push(points);
             }
-            LayerType::River => {
-                let polygon = Polygon::new()
-                    .set("points", v.join(" "))
-                    .set("fill", "#0074D9");
-                river_group = river_group.add(polygon);
+            acc
+        });
+
+        for polygon in polygons {
+            
+            let points = polygon.iter().map(|(x, y)| format!("{},{}", x, y)).join(" ");
+
+            match multipolygon.layer_type {
+                LayerType::Park => {
+                    let polygon = Polygon::new().set("points", points);
+                    park_group = park_group.add(polygon);
+                }
+                LayerType::River => {
+                    let polygon = Polygon::new()
+                        .set("points", points)
+                        .set("fill", "#0074D9");
+                    river_group = river_group.add(polygon);
+                }
             }
         }
     }
