@@ -9,11 +9,9 @@ extern crate osmflat;
 extern crate serde_derive;
 extern crate svg;
 
-use bresenham::Bresenham;
 use docopt::Docopt;
 use failure::Error;
 use flatdata::{Archive, FileResourceStorage};
-use haversine::{distance, Location};
 use itertools::Itertools;
 use svg::node::element::{Group, Polygon, Polyline};
 use svg::Document;
@@ -116,7 +114,7 @@ impl MapTransform {
         )
     }
 
-    fn transform_meters(&self, distance: u32) -> u32 {
+    fn _transform_meters(&self, distance: u32) -> u32 {
         let start = haversine::Location {
             latitude: self.min_x,
             longitude: self.min_y,
@@ -312,14 +310,6 @@ fn generate(
                 if (key == "natural" && val == "water") || (key == "waterway" && val == "river") {
                     is_wet = true;
                 }
-
-                if relation.id() == 7643526 {
-                    println!("{}: {} -> {}", key, val, relation_idx);
-                }
-            }
-
-            if relation.id() == 7643526 {
-                println!("is_multipolygon: {}, is_green: {}", is_multipolygon, is_green);
             }
 
             if is_multipolygon && is_green {
@@ -404,11 +394,10 @@ fn generate(
         }
     }
 
-    for multipolygon in multipolygons {
-        let mut all_points: Vec<Vec<(isize, isize)>> = Vec::new();
-        for relation_member in relation_members.at(multipolygon.relation_idx as usize) {
-            let points = match *relation_member {
-                osmflat::RelationMembers::RelationMember(ref relation_member) => {
+    for multipolygon in multipolygons {   
+        let (_, p, r) = relation_members.at(multipolygon.relation_idx as usize).map(|relation_member| {
+            match *relation_member {
+                osmflat::RelationMembers::RelationMember(ref _relation_member) => {
                     vec![]
                 }
                 osmflat::RelationMembers::WayMember(ref way_member) => {
@@ -435,44 +424,33 @@ fn generate(
                         vec![]
                     }
                 }
-            };
-
-            all_points.push(points);
-        }
-
-        let acc: Vec<Vec<(isize, isize)>> = vec![vec![]];
-        let polygons = all_points.into_iter().fold(acc, |mut acc, mut points| {
-            let last_acc_point = acc.last().and_then(|points| {
-                points.last().map(|p| *p)
-            });
-            let first_point = points.first().map(|p| *p);
-            
-            if last_acc_point == first_point {
-                let size = acc.len();
-                acc[size-1].append(&mut points);
-            } else {
-                acc.push(points);
             }
-            acc
+        }).fold((Vec::<(isize, isize)>::new(), park_group, river_group), |(mut polygon, mut park_group, mut river_group), mut new_points| {
+            let last_polygon_point = polygon.last().map(|p| *p);
+            let first_point = new_points.first().map(|p| *p);
+            if last_polygon_point.is_none() || last_polygon_point == first_point {
+                polygon.append(&mut new_points);
+            } else {
+                let points = polygon.iter().map(|(x, y)| format!("{},{}", x, y)).join(" ");
+                match multipolygon.layer_type {
+                    LayerType::Park => {
+                        let polygon = Polygon::new().set("points", points);
+                        park_group = park_group.add(polygon);
+                    }
+                    LayerType::River => {
+                        let polygon = Polygon::new()
+                            .set("points", points)
+                            .set("fill", "#0074D9");
+                        river_group = river_group.add(polygon);
+                    }
+                };
+                polygon.clear();
+            }
+            (polygon, park_group, river_group)
         });
 
-        for polygon in polygons {
-            
-            let points = polygon.iter().map(|(x, y)| format!("{},{}", x, y)).join(" ");
-
-            match multipolygon.layer_type {
-                LayerType::Park => {
-                    let polygon = Polygon::new().set("points", points);
-                    park_group = park_group.add(polygon);
-                }
-                LayerType::River => {
-                    let polygon = Polygon::new()
-                        .set("points", points)
-                        .set("fill", "#0074D9");
-                    river_group = river_group.add(polygon);
-                }
-            }
-        }
+        park_group = p;
+        river_group = r;
     }
 
     document = document.add(road_group).add(park_group).add(river_group);
