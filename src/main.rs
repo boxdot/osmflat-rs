@@ -517,6 +517,7 @@ fn run() -> Result<(), Error> {
         relations.grow()?; // index 0 is reserved for invalid relation
 
         let mut relation_members = builder.start_relation_members()?;
+        relation_members.grow()?; // index 0 is ALSO reserved for invalid relation
 
         for idx in index {
             let block: osmpbf::PrimitiveBlock = read_block(&mut file, &idx)?;
