@@ -211,13 +211,27 @@ impl Into<usize> for Multipolygon {
     }
 }
 
+enum PathType {
+    Road,
+    River,
+    Riverbank,
+    Park,
+}
+
+struct Path {
+    start_node_idx: u32,
+    end_node_idx: u32,
+    is_multipolygon: bool,
+    path_type: PathType,
+}
+
 fn way_filter(
     way: &osmflat::Way,
     next_way: &osmflat::Way,
     tags_index: &flatdata::ArrayView<osmflat::TagIndex>,
     tags: &flatdata::ArrayView<osmflat::Tag>,
     strings: &str,
-) -> Option<WayType> {
+) -> Option<Path> {
     // Filter all ways that have less than 2 nodes.
     let start_node_idx = way.ref_first_idx();
     let end_node_idx = next_way.ref_first_idx();
@@ -243,19 +257,25 @@ fn way_filter(
                 || val == "bridleway"
                 || val == "path")
         {
-            return Some(WayType::Road {
+            return Some(Path {
                 start_node_idx,
                 end_node_idx,
+                is_multipolygon: false,
+                path_type: PathType::Road,
             });
         } else if key == "waterway" && (val == "canal" || val == "river") {
-            return Some(WayType::River {
+            return Some(Path {
                 start_node_idx,
                 end_node_idx,
+                is_multipolygon: false,
+                path_type: PathType::River,
             });
         } else if (key == "waterway" && val == "riverbank") || (key == "water" && val == "lake") {
-            return Some(WayType::Riverbank {
+            return Some(Path {
                 start_node_idx,
                 end_node_idx,
+                is_multipolygon: false,
+                path_type: PathType::Riverbank,
             });
         }
     }
@@ -333,114 +353,59 @@ fn generate(
                 &tags,
                 strings,
             )
-        });
-
-    // all the driveable roads
-    let roads = ways
-        .iter()
-        .zip(ways.iter().skip(1))
-        .filter_map(|(way, next_way)| way_filter(&*way, &*next_way, &tags_index, &tags, strings));
-
-    // compute extent
-    let mut coords = roads
-        .clone()
-        .flat_map(|way_type| NodesIterator::from_way_type(archive, &way_type).map(GeoCoord::from));
-
-    let first_coord = coords.next().expect("no roads found");
-    let (min, max) = coords.fold((first_coord, first_coord), |(min, max), coord| {
-        (min.min(coord), max.max(coord))
-    });
-
-    // compute ratio and height
-    let ratio = 360. / 180. * (max.lat - min.lat) / (max.lon - min.lon);
-    let height = (width as f64 * ratio) as u32;
-
-    // create world -> raster transformation
-    let t = MapTransform::new(width - 1, height - 1, min, max);
-
-    // create paths
-    let paths = roads.map(|way_type| {
-        let raster_coords = NodesIterator::from_way_type(archive, &way_type)
-            .map(GeoCoord::from)
-            .map(|coord| t.transform(coord));
-        (raster_coords, way_type)
-    });
-
-    let mut document = Document::new().set("viewBox", (0, 0, width, height));
-    let mut road_group = Group::new()
-        .set("stroke", "#001F3F")
-        .set("opacity", 0.7)
-        .set("fill", "none");
-    let park_group = Group::new()
-        .set("stroke", "black")
-        .set("fill", "#3D9970")
-        .set("opacity", 0.3);
-    let mut river_ways_group = Group::new()
-        .set("fill", "none")
-        .set("stroke", "#B5D5F3")
-        .set("stroke-width", 5);
-    let mut river_group = Group::new().set("stroke", "#B5D5F3").set("fill", "#B5D5F3");
-
-    for (raster_coords, way_type) in paths {
-        let v: Vec<String> = raster_coords.map(|(x, y)| format!("{},{}", x, y)).collect();
-        match way_type {
-            WayType::Road { .. } => {
-                let mut polyline = Polyline::new().set("points", v.join(" "));
-                road_group = road_group.add(polyline);
-            }
-            WayType::Riverbank { .. } => {
-                let polygon = Polygon::new().set("points", v.join(" "));
-                river_group = river_group.add(polygon);
-            }
-            WayType::River { .. } => {
-                let polyline = Polyline::new().set("points", v.join(" "));
-                river_ways_group = river_ways_group.add(polyline);
-            }
-        }
-    }
-
-    let (_, park_group, river_group) = multipolygons
+        })
         .flat_map(|multipolygon| {
             let nodes = &nodes;
             let ways = &ways;
-            let t = &t;
             relation_members
                 .at(multipolygon.into())
-                .filter_map(move |relation_member| match *relation_member {
-                    osmflat::RelationMembers::RelationMember(ref _relation_member) => {
-                        None
-                    }
-                    osmflat::RelationMembers::WayMember(ref way_member) => {
-                        let role = substring(strings, way_member.role_idx());
-                        if role == "outer" {
-                            let way = ways.at(way_member.way_idx() as usize);
-                            let next_way = ways.at(way_member.way_idx() as usize + 1);
-                            let points: Vec<(isize, isize)> = NodesIterator::from_way(
-                                archive, &way, &next_way,
-                            ).map(GeoCoord::from)
-                                .map(|coord| t.transform(coord))
-                                .collect();
-                            Some((multipolygon, points))
-                        } else {
-                            None
+                .filter_map(move |relation_member| {
+                    let path_type = match multipolygon {
+                        Multipolygon::Park(_) => PathType::Park,
+                        Multipolygon::River(_) => PathType::River,
+                    };
+                    match *relation_member {
+                        osmflat::RelationMembers::RelationMember(ref _relation_member) => None,
+                        osmflat::RelationMembers::WayMember(ref way_member) => {
+                            let role = substring(strings, way_member.role_idx());
+                            if role == "outer" {
+                                let way = ways.at(way_member.way_idx() as usize);
+                                let next_way = ways.at(way_member.way_idx() as usize + 1);
+                                Some(Path {
+                                    start_node_idx: way.ref_first_idx(),
+                                    end_node_idx: next_way.ref_first_idx(),
+                                    is_multipolygon: true,
+                                    path_type: path_type,
+                                })
+                            } else {
+                                None
+                            }
                         }
-                    }
-                    osmflat::RelationMembers::NodeMember(ref node_member) => {
-                        let role = substring(strings, node_member.role_idx());
-                        if role == "outer" {
-                            let node = nodes.at(node_member.node_idx() as usize);
-                            Some((multipolygon, vec![t.transform(GeoCoord::from(node))]))
-                        } else {
-                            None
+                        osmflat::RelationMembers::NodeMember(ref node_member) => {
+                            let role = substring(strings, node_member.role_idx());
+                            if role == "outer" {
+                                let node = nodes.at(node_member.node_idx() as usize);
+                                Some(Path {
+                                    start_node_idx: node_member.node_idx(),
+                                    end_node_idx: node_member.node_idx() + 1,
+                                    is_multipolygon: true,
+                                    path_type: path_type,
+                                })
+                            } else {
+                                None
+                            }
                         }
                     }
                 })
-        })
-        .fold(
-            (Vec::<(isize, isize)>::new(), park_group, river_group),
-            |(mut polygon, mut park_group, mut river_group), (multipolygon, mut new_points)| {
-                let first_polygon_point = polygon.first().map(|p| *p);
-                let last_polygon_point = polygon.last().map(|p| *p);
+        }).fold(
+            Vec::<Path>::new(),
+            |mut paths, mut path| {
+                let first_polygon_point = paths.last().and_then(|path| {
+                    GeoCoord::from(nodes.at(path.start_node_idx))
+                });
+                let first_polygon_point = paths.last().and_then(|path| {
+                    GeoCoord::from(nodes.at(path.end_node_idx - 1))
+                });
                 let first_point = new_points.first().map(|p| *p);
                 let last_point = new_points.last().map(|p| *p);
 
@@ -468,8 +433,113 @@ fn generate(
                     polygon.clear();
                 }
                 (polygon, park_group, river_group)
-            },
-        );
+            }
+        });
+
+    // all the driveable roads
+    let roads = ways
+        .iter()
+        .zip(ways.iter().skip(1))
+        .filter_map(|(way, next_way)| way_filter(&*way, &*next_way, &tags_index, &tags, strings));
+
+    let work_to_do: Vec<_> = multipolygons.chain(roads).collect();
+
+    work_to_do.par_iter().map(|unit_of_work| {
+
+    });
+
+    // compute extent
+    // let mut coords = roads
+    //     .clone()
+    //     .flat_map(|way_type| NodesIterator::from_way_type(archive, &way_type).map(GeoCoord::from));
+
+    // let first_coord = coords.next().expect("no roads found");
+    // let (min, max) = coords.fold((first_coord, first_coord), |(min, max), coord| {
+    //     (min.min(coord), max.max(coord))
+    // });
+
+    // // compute ratio and height
+    // let ratio = 360. / 180. * (max.lat - min.lat) / (max.lon - min.lon);
+    // let height = (width as f64 * ratio) as u32;
+
+    // // create world -> raster transformation
+    // let t = MapTransform::new(width - 1, height - 1, min, max);
+
+    // create paths
+    // let paths = roads.map(|way_type| {
+    //     let raster_coords = NodesIterator::from_way_type(archive, &way_type)
+    //         .map(GeoCoord::from)
+    //         .map(|coord| t.transform(coord));
+    //     (raster_coords, way_type)
+    // });
+
+    let mut document = Document::new().set("viewBox", (0, 0, width, width));
+    let mut road_group = Group::new()
+        .set("stroke", "#001F3F")
+        .set("opacity", 0.7)
+        .set("fill", "none");
+    let park_group = Group::new()
+        .set("stroke", "black")
+        .set("fill", "#3D9970")
+        .set("opacity", 0.3);
+    let mut river_ways_group = Group::new()
+        .set("fill", "none")
+        .set("stroke", "#B5D5F3")
+        .set("stroke-width", 5);
+    let mut river_group = Group::new().set("stroke", "#B5D5F3").set("fill", "#B5D5F3");
+
+    // for (raster_coords, way_type) in paths {
+    //     let v: Vec<String> = raster_coords.map(|(x, y)| format!("{},{}", x, y)).collect();
+    //     match way_type {
+    //         WayType::Road { .. } => {
+    //             let mut polyline = Polyline::new().set("points", v.join(" "));
+    //             road_group = road_group.add(polyline);
+    //         }
+    //         WayType::Riverbank { .. } => {
+    //             let polygon = Polygon::new().set("points", v.join(" "));
+    //             river_group = river_group.add(polygon);
+    //         }
+    //         WayType::River { .. } => {
+    //             let polyline = Polyline::new().set("points", v.join(" "));
+    //             river_ways_group = river_ways_group.add(polyline);
+    //         }
+    //     }
+    // }
+
+    // multipolygons.fold(
+    //     (Vec::<(isize, isize)>::new(), park_group, river_group),
+    //     |(mut polygon, mut park_group, mut river_group), (multipolygon, mut new_points)| {
+    //         let first_polygon_point = polygon.first().map(|p| *p);
+    //         let last_polygon_point = polygon.last().map(|p| *p);
+    //         let first_point = new_points.first().map(|p| *p);
+    //         let last_point = new_points.last().map(|p| *p);
+
+    //         if last_polygon_point.is_none() || last_polygon_point == first_point {
+    //             polygon.append(&mut new_points);
+    //         }
+
+    //         if first_polygon_point == last_point
+    //             || !(last_polygon_point.is_none() || last_polygon_point == first_point)
+    //         {
+    //             let points = polygon
+    //                 .iter()
+    //                 .map(|(x, y)| format!("{},{}", x, y))
+    //                 .join(" ");
+    //             match multipolygon {
+    //                 Multipolygon::Park(_) => {
+    //                     let polygon = Polygon::new().set("points", points);
+    //                     park_group = park_group.add(polygon);
+    //                 }
+    //                 Multipolygon::River(_) => {
+    //                     let polygon = Polygon::new().set("points", points);
+    //                     river_group = river_group.add(polygon);
+    //                 }
+    //             };
+    //             polygon.clear();
+    //         }
+    //         (polygon, park_group, river_group)
+    //     },
+    // );
 
     document = document
         .add(road_group)
