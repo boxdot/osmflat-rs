@@ -77,14 +77,6 @@ impl<N: Deref<Target = osmflat::Node>> convert::From<N> for GeoCoord {
     }
 }
 
-#[derive(Debug, Default, Clone, Copy)]
-struct Color {
-    r: u8,
-    g: u8,
-    b: u8,
-    a: u8,
-}
-
 #[derive(Debug, Clone)]
 struct MapTransform {
     width: u32,
@@ -204,14 +196,14 @@ enum WayType {
     },
 }
 
-enum LayerType {
+enum MultipolygonType {
     Park,
     River,
 }
 
 struct Layer {
     relation_idx: u32,
-    layer_type: LayerType,
+    layer_type: MultipolygonType,
 }
 
 fn way_filter(
@@ -228,16 +220,15 @@ fn way_filter(
         return None;
     }
 
-    // Filter all ways that do not have a highway tag. Also check for specific
-    // values.
+    // Filter all ways that we want to render.
     let start_tag_idx = way.tag_first_idx();
     let end_tag_idx = next_way.tag_first_idx();
     for tag_idx in start_tag_idx..end_tag_idx {
         let tag = tags.at(tags_index.at(tag_idx as usize).value() as usize);
         let key = substring(strings, tag.key_idx());
         let val = substring(strings, tag.value_idx());
-        if key == "highway" {
-            if val == "pedestrian"
+        if key == "highway"
+            && !(val == "pedestrian"
                 || val == "steps"
                 || val == "footway"
                 || val == "construction"
@@ -245,10 +236,8 @@ fn way_filter(
                 || val == "cycleway"
                 || val == "layby"
                 || val == "bridleway"
-                || val == "path"
-            {
-                return None;
-            }
+                || val == "path")
+        {
             return Some(WayType::Road {
                 start_node_idx,
                 end_node_idx,
@@ -265,7 +254,6 @@ fn way_filter(
             });
         }
     }
-
     None
 }
 
@@ -302,7 +290,10 @@ fn generate(
                     is_multipolygon = true;
                 }
                 if key == "landuse"
-                    && (val == "forest" || val == "grass" || val == "recreation_ground")
+                    && (val == "forest"
+                        || val == "grass"
+                        || val == "recreation_ground"
+                        || val == "cemetery")
                     || (key == "leisure" && val == "park")
                 {
                     is_green = true;
@@ -314,12 +305,12 @@ fn generate(
 
             if is_multipolygon && is_green {
                 Some(Layer {
-                    layer_type: LayerType::Park,
+                    layer_type: MultipolygonType::Park,
                     relation_idx: relation_idx as u32,
                 })
             } else if is_multipolygon && is_wet {
                 Some(Layer {
-                    layer_type: LayerType::River,
+                    layer_type: MultipolygonType::River,
                     relation_idx: relation_idx as u32,
                 })
             } else {
@@ -428,21 +419,28 @@ fn generate(
             .fold(
                 (Vec::<(isize, isize)>::new(), park_group, river_group),
                 |(mut polygon, mut park_group, mut river_group), mut new_points| {
+                    let first_polygon_point = polygon.first().map(|p| *p);
                     let last_polygon_point = polygon.last().map(|p| *p);
                     let first_point = new_points.first().map(|p| *p);
+                    let last_point = new_points.last().map(|p| *p);
+
                     if last_polygon_point.is_none() || last_polygon_point == first_point {
                         polygon.append(&mut new_points);
-                    } else {
+                    }
+
+                    if first_polygon_point == last_point
+                        || !(last_polygon_point.is_none() || last_polygon_point == first_point)
+                    {
                         let points = polygon
                             .iter()
                             .map(|(x, y)| format!("{},{}", x, y))
                             .join(" ");
                         match multipolygon.layer_type {
-                            LayerType::Park => {
+                            MultipolygonType::Park => {
                                 let polygon = Polygon::new().set("points", points);
                                 park_group = park_group.add(polygon);
                             }
-                            LayerType::River => {
+                            MultipolygonType::River => {
                                 let polygon = Polygon::new().set("points", points);
                                 river_group = river_group.add(polygon);
                             }
