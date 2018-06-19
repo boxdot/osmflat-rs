@@ -206,7 +206,7 @@ impl Into<usize> for Multipolygon {
     fn into(self) -> usize {
         match self {
             Multipolygon::Park(idx) => idx,
-            Multipolygon::River(idx) => idx
+            Multipolygon::River(idx) => idx,
         }
     }
 }
@@ -371,7 +371,7 @@ fn generate(
         .set("stroke", "#001F3F")
         .set("opacity", 0.7)
         .set("fill", "none");
-    let mut park_group = Group::new()
+    let park_group = Group::new()
         .set("stroke", "black")
         .set("fill", "#3D9970")
         .set("opacity", 0.3);
@@ -388,91 +388,88 @@ fn generate(
                 let mut polyline = Polyline::new().set("points", v.join(" "));
                 road_group = road_group.add(polyline);
             }
-            WayType::Riverbank {
-                start_node_idx: _,
-                end_node_idx: _,
-            } => {
+            WayType::Riverbank { .. } => {
                 let polygon = Polygon::new().set("points", v.join(" "));
                 river_group = river_group.add(polygon);
             }
-            WayType::River {
-                start_node_idx: _,
-                end_node_idx: _,
-            } => {
+            WayType::River { .. } => {
                 let polyline = Polyline::new().set("points", v.join(" "));
                 river_ways_group = river_ways_group.add(polyline);
             }
         }
     }
 
-    for multipolygon in multipolygons {
-        let (_, p, r) = relation_members
-            .at(multipolygon.into())
-            .map(|relation_member| match *relation_member {
-                osmflat::RelationMembers::RelationMember(ref _relation_member) => vec![],
-                osmflat::RelationMembers::WayMember(ref way_member) => {
-                    let role = substring(strings, way_member.role_idx());
-                    if role == "outer" {
-                        let way = ways.at(way_member.way_idx() as usize);
-                        let next_way = ways.at(way_member.way_idx() as usize + 1);
-                        let points: Vec<(isize, isize)> = NodesIterator::from_way(
-                            archive, &way, &next_way,
-                        ).map(GeoCoord::from)
-                            .map(|coord| t.transform(coord))
-                            .collect();
-                        points
-                    } else {
-                        vec![]
+    let (_, park_group, river_group) = multipolygons
+        .flat_map(|multipolygon| {
+            let nodes = &nodes;
+            let ways = &ways;
+            let t = &t;
+            relation_members
+                .at(multipolygon.into())
+                .map(move |relation_member| match *relation_member {
+                    osmflat::RelationMembers::RelationMember(ref _relation_member) => {
+                        (multipolygon, vec![])
                     }
+                    osmflat::RelationMembers::WayMember(ref way_member) => {
+                        let role = substring(strings, way_member.role_idx());
+                        if role == "outer" {
+                            let way = ways.at(way_member.way_idx() as usize);
+                            let next_way = ways.at(way_member.way_idx() as usize + 1);
+                            let points: Vec<(isize, isize)> = NodesIterator::from_way(
+                                archive, &way, &next_way,
+                            ).map(GeoCoord::from)
+                                .map(|coord| t.transform(coord))
+                                .collect();
+                            (multipolygon, points)
+                        } else {
+                            (multipolygon, vec![])
+                        }
+                    }
+                    osmflat::RelationMembers::NodeMember(ref node_member) => {
+                        let role = substring(strings, node_member.role_idx());
+                        if role == "outer" {
+                            let node = nodes.at(node_member.node_idx() as usize);
+                            (multipolygon, vec![t.transform(GeoCoord::from(node))])
+                        } else {
+                            (multipolygon, vec![])
+                        }
+                    }
+                })
+        })
+        .fold(
+            (Vec::<(isize, isize)>::new(), park_group, river_group),
+            |(mut polygon, mut park_group, mut river_group), (multipolygon, mut new_points)| {
+                let first_polygon_point = polygon.first().map(|p| *p);
+                let last_polygon_point = polygon.last().map(|p| *p);
+                let first_point = new_points.first().map(|p| *p);
+                let last_point = new_points.last().map(|p| *p);
+
+                if last_polygon_point.is_none() || last_polygon_point == first_point {
+                    polygon.append(&mut new_points);
                 }
-                osmflat::RelationMembers::NodeMember(ref node_member) => {
-                    let role = substring(strings, node_member.role_idx());
-                    if role == "outer" {
-                        let node = nodes.at(node_member.node_idx() as usize);
-                        vec![t.transform(GeoCoord::from(node))]
-                    } else {
-                        vec![]
-                    }
+
+                if first_polygon_point == last_point
+                    || !(last_polygon_point.is_none() || last_polygon_point == first_point)
+                {
+                    let points = polygon
+                        .iter()
+                        .map(|(x, y)| format!("{},{}", x, y))
+                        .join(" ");
+                    match multipolygon {
+                        Multipolygon::Park(_) => {
+                            let polygon = Polygon::new().set("points", points);
+                            park_group = park_group.add(polygon);
+                        }
+                        Multipolygon::River(_) => {
+                            let polygon = Polygon::new().set("points", points);
+                            river_group = river_group.add(polygon);
+                        }
+                    };
+                    polygon.clear();
                 }
-            })
-            .fold(
-                (Vec::<(isize, isize)>::new(), park_group, river_group),
-                |(mut polygon, mut park_group, mut river_group), mut new_points| {
-                    let first_polygon_point = polygon.first().map(|p| *p);
-                    let last_polygon_point = polygon.last().map(|p| *p);
-                    let first_point = new_points.first().map(|p| *p);
-                    let last_point = new_points.last().map(|p| *p);
-
-                    if last_polygon_point.is_none() || last_polygon_point == first_point {
-                        polygon.append(&mut new_points);
-                    }
-
-                    if first_polygon_point == last_point
-                        || !(last_polygon_point.is_none() || last_polygon_point == first_point)
-                    {
-                        let points = polygon
-                            .iter()
-                            .map(|(x, y)| format!("{},{}", x, y))
-                            .join(" ");
-                        match multipolygon {
-                            Multipolygon::Park(_) => {
-                                let polygon = Polygon::new().set("points", points);
-                                park_group = park_group.add(polygon);
-                            }
-                            Multipolygon::River(_) => {
-                                let polygon = Polygon::new().set("points", points);
-                                river_group = river_group.add(polygon);
-                            }
-                        };
-                        polygon.clear();
-                    }
-                    (polygon, park_group, river_group)
-                },
-            );
-
-        park_group = p;
-        river_group = r;
-    }
+                (polygon, park_group, river_group)
+            },
+        );
 
     document = document
         .add(road_group)
