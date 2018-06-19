@@ -406,9 +406,9 @@ fn generate(
             let t = &t;
             relation_members
                 .at(multipolygon.into())
-                .map(move |relation_member| match *relation_member {
+                .filter_map(move |relation_member| match *relation_member {
                     osmflat::RelationMembers::RelationMember(ref _relation_member) => {
-                        (multipolygon, vec![])
+                        None
                     }
                     osmflat::RelationMembers::WayMember(ref way_member) => {
                         let role = substring(strings, way_member.role_idx());
@@ -420,18 +420,18 @@ fn generate(
                             ).map(GeoCoord::from)
                                 .map(|coord| t.transform(coord))
                                 .collect();
-                            (multipolygon, points)
+                            Some((multipolygon, points))
                         } else {
-                            (multipolygon, vec![])
+                            None
                         }
                     }
                     osmflat::RelationMembers::NodeMember(ref node_member) => {
                         let role = substring(strings, node_member.role_idx());
                         if role == "outer" {
                             let node = nodes.at(node_member.node_idx() as usize);
-                            (multipolygon, vec![t.transform(GeoCoord::from(node))])
+                            Some((multipolygon, vec![t.transform(GeoCoord::from(node))]))
                         } else {
-                            (multipolygon, vec![])
+                            None
                         }
                     }
                 })
