@@ -196,14 +196,19 @@ enum WayType {
     },
 }
 
-enum MultipolygonType {
-    Park,
-    River,
+#[derive(Debug, Clone, Copy)]
+enum Multipolygon {
+    Park(usize),
+    River(usize),
 }
 
-struct Layer {
-    relation_idx: u32,
-    layer_type: MultipolygonType,
+impl Into<usize> for Multipolygon {
+    fn into(self) -> usize {
+        match self {
+            Multipolygon::Park(idx) => idx,
+            Multipolygon::River(idx) => idx
+        }
+    }
 }
 
 fn way_filter(
@@ -257,6 +262,49 @@ fn way_filter(
     None
 }
 
+fn relation_filter(
+    relation_idx: usize,
+    relation: &osmflat::Relation,
+    next_relation: &osmflat::Relation,
+    tags_index: &flatdata::ArrayView<osmflat::TagIndex>,
+    tags: &flatdata::ArrayView<osmflat::Tag>,
+    strings: &str,
+) -> Option<Multipolygon> {
+    let start_tag_idx = relation.tag_first_idx();
+    let end_tag_idx = next_relation.tag_first_idx();
+
+    let mut is_multipolygon = false;
+    let mut is_green = false;
+    let mut is_wet = false;
+    for tag_idx in start_tag_idx..end_tag_idx {
+        let tag = tags.at(tags_index.at(tag_idx as usize).value() as usize);
+        let key = substring(strings, tag.key_idx());
+        let val = substring(strings, tag.value_idx());
+        if key == "type" && val == "multipolygon" {
+            is_multipolygon = true;
+        }
+        if key == "landuse"
+            && (val == "forest"
+                || val == "grass"
+                || val == "recreation_ground"
+                || val == "cemetery") || (key == "leisure" && val == "park")
+        {
+            is_green = true;
+        }
+        if (key == "natural" && val == "water") || (key == "waterway" && val == "river") {
+            is_wet = true;
+        }
+    }
+
+    if is_multipolygon && is_green {
+        Some(Multipolygon::Park(relation_idx))
+    } else if is_multipolygon && is_wet {
+        Some(Multipolygon::River(relation_idx))
+    } else {
+        None
+    }
+}
+
 fn generate(
     archive: &osmflat::Osm,
     output_path: &std::path::Path,
@@ -271,53 +319,23 @@ fn generate(
     let strings = str::from_utf8(archive.stringtable())
         .expect("stringtable contains invalid utf8 characters");
 
+    // multipolygons compose stuff like parks, lakes, etc.
     let multipolygons = relations
         .iter()
         .zip(relations.iter().skip(1))
         .enumerate()
         .filter_map(|(relation_idx, (relation, next_relation))| {
-            let start_tag_idx = relation.tag_first_idx();
-            let end_tag_idx = next_relation.tag_first_idx();
-
-            let mut is_multipolygon = false;
-            let mut is_green = false;
-            let mut is_wet = false;
-            for tag_idx in start_tag_idx..end_tag_idx {
-                let tag = tags.at(tags_index.at(tag_idx as usize).value() as usize);
-                let key = substring(strings, tag.key_idx());
-                let val = substring(strings, tag.value_idx());
-                if key == "type" && val == "multipolygon" {
-                    is_multipolygon = true;
-                }
-                if key == "landuse"
-                    && (val == "forest"
-                        || val == "grass"
-                        || val == "recreation_ground"
-                        || val == "cemetery")
-                    || (key == "leisure" && val == "park")
-                {
-                    is_green = true;
-                }
-                if (key == "natural" && val == "water") || (key == "waterway" && val == "river") {
-                    is_wet = true;
-                }
-            }
-
-            if is_multipolygon && is_green {
-                Some(Layer {
-                    layer_type: MultipolygonType::Park,
-                    relation_idx: relation_idx as u32,
-                })
-            } else if is_multipolygon && is_wet {
-                Some(Layer {
-                    layer_type: MultipolygonType::River,
-                    relation_idx: relation_idx as u32,
-                })
-            } else {
-                None
-            }
+            relation_filter(
+                relation_idx,
+                &*relation,
+                &*next_relation,
+                &tags_index,
+                &tags,
+                strings,
+            )
         });
 
+    // all the driveable roads
     let roads = ways
         .iter()
         .zip(ways.iter().skip(1))
@@ -362,6 +380,7 @@ fn generate(
         .set("stroke", "#B5D5F3")
         .set("stroke-width", 5);
     let mut river_group = Group::new().set("stroke", "#B5D5F3").set("fill", "#B5D5F3");
+
     for (raster_coords, way_type) in paths {
         let v: Vec<String> = raster_coords.map(|(x, y)| format!("{},{}", x, y)).collect();
         match way_type {
@@ -388,7 +407,7 @@ fn generate(
 
     for multipolygon in multipolygons {
         let (_, p, r) = relation_members
-            .at(multipolygon.relation_idx as usize)
+            .at(multipolygon.into())
             .map(|relation_member| match *relation_member {
                 osmflat::RelationMembers::RelationMember(ref _relation_member) => vec![],
                 osmflat::RelationMembers::WayMember(ref way_member) => {
@@ -435,12 +454,12 @@ fn generate(
                             .iter()
                             .map(|(x, y)| format!("{},{}", x, y))
                             .join(" ");
-                        match multipolygon.layer_type {
-                            MultipolygonType::Park => {
+                        match multipolygon {
+                            Multipolygon::Park(_) => {
                                 let polygon = Polygon::new().set("points", points);
                                 park_group = park_group.add(polygon);
                             }
-                            MultipolygonType::River => {
+                            Multipolygon::River(_) => {
                                 let polygon = Polygon::new().set("points", points);
                                 river_group = river_group.add(polygon);
                             }
