@@ -50,7 +50,8 @@ fn serialize_header(
     builder: &mut osmflat::OsmBuilder,
     stringtable: &mut StringTable,
 ) -> Result<(), io::Error> {
-    let mut header = flatdata::StructBuf::<osmflat::Header>::new();
+    let mut header_buf = flatdata::StructBuf::<osmflat::Header>::new();
+    let mut header = header_buf.get_mut();
 
     if let Some(ref bbox) = header_block.bbox {
         header.set_bbox_left(bbox.left);
@@ -92,7 +93,7 @@ fn serialize_header(
         header.set_osmosis_replication_base_url_idx(stringtable.push(url.clone()));
     }
 
-    builder.set_header(&header)?;
+    builder.set_header(header.into_ref())?;
     Ok(())
 }
 
@@ -150,10 +151,8 @@ impl TagSerializer {
     fn next_index(&self) -> u32 {
         self.tags_index.len() as u32
     }
-}
 
-impl Drop for TagSerializer {
-    fn drop(&mut self) {
+    fn close(self) {
         if let Err(e) = self.tags.close() {
             panic!("failed to close tags: {}", e);
         }
@@ -397,7 +396,7 @@ fn run() -> Result<(), Error> {
     let stringtable = Rc::new(RefCell::new(StringTable::new()));
     stringtable.borrow_mut().push("");
     let mut tags = TagSerializer::new(&mut builder, stringtable.clone())?;
-    let mut infos = builder.start_infos()?;
+    let infos = builder.start_infos()?; // TODO: Actually put some data in here
     let mut nodes_index = builder.start_nodes_index()?;
     info!("Initialized new osmflat archive at: {}", &args.arg_output);
 
@@ -545,7 +544,7 @@ fn run() -> Result<(), Error> {
     info!("Relations converted.");
 
     // Finalize data structures
-    drop(tags); // drop the reference to stringtable
+    tags.close(); // drop the reference to stringtable
 
     info!("Writing stringtable to disk...");
     let stringtable = Rc::try_unwrap(stringtable)
