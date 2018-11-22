@@ -14,7 +14,6 @@ use std::convert;
 use std::env;
 use std::fs::File;
 use std::io::BufWriter;
-use std::ops::Deref;
 use std::path::Path;
 use std::rc::Rc;
 use std::str;
@@ -41,8 +40,8 @@ impl GeoCoord {
     }
 }
 
-impl<N: Deref<Target = osmflat::Node>> convert::From<N> for GeoCoord {
-    fn from(node: N) -> Self {
+impl<'a> convert::From<osmflat::RefNode<'a>> for GeoCoord {
+    fn from(node: osmflat::RefNode<'a>) -> Self {
         const COORD_SCALE: f64 = 0.000000001;
         Self {
             lat: node.lat() as f64 * COORD_SCALE,
@@ -129,7 +128,11 @@ struct NodesIterator<'a> {
 }
 
 impl<'a> NodesIterator<'a> {
-    fn from_way(archive: &'a osmflat::Osm, way: &osmflat::Way, next_way: &osmflat::Way) -> Self {
+    fn from_way(
+        archive: &'a osmflat::Osm,
+        way: &osmflat::RefWay,
+        next_way: &osmflat::RefWay,
+    ) -> Self {
         Self {
             nodes: archive.nodes(),
             nodes_index: archive.nodes_index(),
@@ -140,8 +143,8 @@ impl<'a> NodesIterator<'a> {
 }
 
 impl<'a> Iterator for NodesIterator<'a> {
-    type Item = flatdata::Handle<'a, osmflat::Node>;
-    fn next(&mut self) -> Option<Self::Item> {
+    type Item = osmflat::RefNode<'a>;
+    fn next<'b>(&'b mut self) -> Option<Self::Item> {
         if self.next < self.end {
             let idx = self.next;
             self.next += 1;
@@ -159,8 +162,8 @@ fn substring(strings: &str, start: u32) -> &str {
 }
 
 fn way_filter(
-    way: &osmflat::Way,
-    next_way: &osmflat::Way,
+    way: &osmflat::RefWay,
+    next_way: &osmflat::RefWay,
     tags_index: &flatdata::ArrayView<osmflat::TagIndex>,
     tags: &flatdata::ArrayView<osmflat::Tag>,
     strings: &str,
@@ -181,9 +184,15 @@ fn way_filter(
         let key = substring(strings, tag.key_idx());
         if key == "highway" {
             let val = substring(strings, tag.value_idx());
-            if val == "pedestrian" || val == "steps" || val == "footway" || val == "construction"
-                || val == "bic" || val == "cycleway" || val == "layby"
-                || val == "bridleway" || val == "path"
+            if val == "pedestrian"
+                || val == "steps"
+                || val == "footway"
+                || val == "construction"
+                || val == "bic"
+                || val == "cycleway"
+                || val == "layby"
+                || val == "bridleway"
+                || val == "path"
             {
                 return false;
             }
@@ -201,13 +210,14 @@ fn render(archive: &osmflat::Osm, width: u32) -> Image {
     let strings = str::from_utf8(archive.stringtable())
         .expect("stringtable contains invalid utf8 characters");
 
-    let roads = ways.iter()
+    let roads = ways
+        .iter()
         .zip(ways.iter().skip(1))
-        .filter(|(way, next_way)| way_filter(&*way, &*next_way, &tags_index, &tags, strings));
+        .filter(|(way, next_way)| way_filter(&way, &next_way, &tags_index, &tags, strings));
 
     // compute extent
     let mut coords = roads.clone().flat_map(|(way, next_way)| {
-        NodesIterator::from_way(archive, &*way, &*next_way).map(GeoCoord::from)
+        NodesIterator::from_way(archive, &way, &next_way).map(GeoCoord::from)
     });
     let first_coord = coords.next().expect("no roads found");
     let (min, max) = coords.fold((first_coord, first_coord), |(min, max), coord| {
@@ -225,7 +235,7 @@ fn render(archive: &osmflat::Osm, width: u32) -> Image {
     let mut image = Image::new(width, height);
 
     let lines = roads.flat_map(|(way, next_way)| {
-        let raster_coords = NodesIterator::from_way(archive, &*way, &*next_way)
+        let raster_coords = NodesIterator::from_way(archive, &way, &next_way)
             .map(GeoCoord::from)
             .map(|coord| t.transform(coord));
         raster_coords.clone().zip(raster_coords.skip(1))
