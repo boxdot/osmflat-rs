@@ -245,7 +245,7 @@ fn serialize_ways(
             for delta in &pbf_way.refs {
                 node_ref += delta;
                 let mut node_idx = nodes_index.grow()?;
-                let idx = match nodes_id_to_idx.find(node_ref as u64) {
+                let idx = match nodes_id_to_idx.get(node_ref as u64) {
                     Some(idx) => idx,
                     None => {
                         stats.num_unresolved_node_ids += 1;
@@ -274,7 +274,7 @@ fn build_relations_index<'a, F: Read + Seek, I: 'a + Iterator<Item = &'a BlockIn
             }
         }
     }
-    Ok(result.finalize())
+    Ok(result.build())
 }
 
 fn serialize_relations(
@@ -325,7 +325,7 @@ fn serialize_relations(
 
                 match member_type.unwrap() {
                     osmpbf::relation::MemberType::Node => {
-                        let idx = match nodes_id_to_idx.find(memid as u64) {
+                        let idx = match nodes_id_to_idx.get(memid as u64) {
                             Some(idx) => idx,
                             None => {
                                 stats.num_unresolved_node_ids += 1;
@@ -341,7 +341,7 @@ fn serialize_relations(
                         member.set_role_idx(stringtable.borrow_mut().insert(role));
                     }
                     osmpbf::relation::MemberType::Way => {
-                        let idx = match ways_id_to_idx.find(memid as u64) {
+                        let idx = match ways_id_to_idx.get(memid as u64) {
                             Some(idx) => idx,
                             None => {
                                 stats.num_unresolved_way_ids += 1;
@@ -357,7 +357,7 @@ fn serialize_relations(
                         member.set_role_idx(stringtable.borrow_mut().insert(role));
                     }
                     osmpbf::relation::MemberType::Relation => {
-                        let idx = match relations_id_to_idx.find(memid as u64) {
+                        let idx = match relations_id_to_idx.get(memid as u64) {
                             Some(idx) => idx,
                             None => {
                                 stats.num_unresolved_rel_ids += 1;
@@ -465,7 +465,7 @@ fn run() -> Result<(), Error> {
         pb.finish();
     }
     info!("Dense nodes converted.");
-    let nodes_id_to_idx = nodes_id_to_idx.finalize();
+    let nodes_id_to_idx = nodes_id_to_idx.build();
     info!("Dense index build.");
 
     // Serialize ways
@@ -501,7 +501,7 @@ fn run() -> Result<(), Error> {
         pb.finish();
     };
     info!("Ways converted.");
-    let ways_id_to_idx = ways_id_to_idx.finalize();
+    let ways_id_to_idx = ways_id_to_idx.build();
     info!("Way index build.");
 
     // Serialize relations
