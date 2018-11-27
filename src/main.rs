@@ -47,7 +47,7 @@ use std::str;
 
 fn serialize_header(
     header_block: &osmpbf::HeaderBlock,
-    builder: &mut osmflat::OsmBuilder,
+    builder: &osmflat::OsmBuilder,
     stringtable: &mut StringTable,
 ) -> Result<(), io::Error> {
     let mut header_buf = flatdata::StructBuf::<osmflat::Header>::new();
@@ -98,16 +98,16 @@ fn serialize_header(
 }
 
 /// Holds tags external vector and deduplicates tags.
-struct TagSerializer {
-    tags: flatdata::ExternalVector<osmflat::Tag>,
-    tags_index: flatdata::ExternalVector<osmflat::TagIndex>,
+struct TagSerializer<'a> {
+    tags: flatdata::ExternalVector<'a, osmflat::Tag>,
+    tags_index: flatdata::ExternalVector<'a, osmflat::TagIndex>,
     stringtable: Rc<RefCell<StringTable>>,
     dedup: HashMap<(u32, u32), u32>, // deduplication table: (key_idx, val_idx) -> pos
 }
 
-impl TagSerializer {
+impl<'a> TagSerializer<'a> {
     fn new(
-        builder: &mut osmflat::OsmBuilder,
+        builder: &'a osmflat::OsmBuilder,
         stringtable: Rc<RefCell<StringTable>>,
     ) -> Result<Self, Error> {
         Ok(Self {
@@ -168,46 +168,47 @@ fn serialize_dense_nodes(
     nodes_id_to_idx: &mut HashMap<i64, u32>,
     tags: &mut TagSerializer,
 ) -> Result<Stats, Error> {
-    let group = &block.primitivegroup[0];
-    let dense_nodes = group.dense.as_ref().unwrap();
+    let mut stats = Stats::default();
+    for group in block.primitivegroup.iter() {
+        let dense_nodes = group.dense.as_ref().unwrap();
 
-    let granularity = block.granularity.unwrap_or(100);
-    let lat_offset = block.lat_offset.unwrap_or(0);
-    let lon_offset = block.lon_offset.unwrap_or(0);
-    let mut lat = 0;
-    let mut lon = 0;
+        let granularity = block.granularity.unwrap_or(100);
+        let lat_offset = block.lat_offset.unwrap_or(0);
+        let lon_offset = block.lon_offset.unwrap_or(0);
+        let mut lat = 0;
+        let mut lon = 0;
 
-    let mut tags_offset = 0;
+        let mut tags_offset = 0;
 
-    let mut id = 0;
-    for i in 0..dense_nodes.id.len() {
-        id += dense_nodes.id[i];
+        let mut id = 0;
+        for i in 0..dense_nodes.id.len() {
+            id += dense_nodes.id[i];
 
-        nodes_id_to_idx.insert(id, nodes.len() as u32);
+            nodes_id_to_idx.insert(id, nodes.len() as u32);
 
-        let mut node = nodes.grow()?;
-        node.set_id(id);
+            let mut node = nodes.grow()?;
+            node.set_id(id);
 
-        lat += dense_nodes.lat[i];
-        lon += dense_nodes.lon[i];
-        node.set_lat(lat_offset + (i64::from(granularity) * lat));
-        node.set_lon(lon_offset + (i64::from(granularity) * lon));
+            lat += dense_nodes.lat[i];
+            lon += dense_nodes.lon[i];
+            node.set_lat(lat_offset + (i64::from(granularity) * lat));
+            node.set_lon(lon_offset + (i64::from(granularity) * lon));
 
-        if tags_offset < dense_nodes.keys_vals.len() {
-            node.set_tag_first_idx(tags.next_index());
-            loop {
-                let k = dense_nodes.keys_vals[tags_offset];
-                if k == 0 {
-                    break; // separator
+            if tags_offset < dense_nodes.keys_vals.len() {
+                node.set_tag_first_idx(tags.next_index());
+                loop {
+                    let k = dense_nodes.keys_vals[tags_offset];
+                    if k == 0 {
+                        break; // separator
+                    }
+                    let v = dense_nodes.keys_vals[tags_offset + 1];
+                    tags_offset += 2;
+                    tags.serialize(&block.stringtable, k as u32, v as u32)?;
                 }
-                let v = dense_nodes.keys_vals[tags_offset + 1];
-                tags_offset += 2;
-                tags.serialize(&block.stringtable, k as u32, v as u32)?;
             }
         }
+        stats.num_nodes += dense_nodes.id.len();
     }
-    let mut stats = Stats::default();
-    stats.num_nodes = dense_nodes.id.len();
     Ok(stats)
 }
 
@@ -386,16 +387,14 @@ fn run() -> Result<(), Error> {
         .init()
         .unwrap();
 
-    let storage = Rc::new(RefCell::new(FileResourceStorage::new(
-        args.arg_output.clone().into(),
-    )));
-    let mut builder = osmflat::OsmBuilder::new(storage.clone())?;
+    let storage = FileResourceStorage::new(args.arg_output.clone().into());
+    let builder = osmflat::OsmBuilder::new(storage)?;
 
     // TODO: Would be nice not store all these strings in memory, but to flush them
     // from time to time to disk.
     let stringtable = Rc::new(RefCell::new(StringTable::new()));
     stringtable.borrow_mut().push("");
-    let mut tags = TagSerializer::new(&mut builder, stringtable.clone())?;
+    let mut tags = TagSerializer::new(&builder, stringtable.clone())?;
     let infos = builder.start_infos()?; // TODO: Actually put some data in here
     let mut nodes_index = builder.start_nodes_index()?;
     info!("Initialized new osmflat archive at: {}", &args.arg_output);
@@ -427,7 +426,7 @@ fn run() -> Result<(), Error> {
     let mut index = pbf_header.ok_or_else(|| format_err!("missing header block"))?;
     let idx = index.next();
     let pbf_header: osmpbf::HeaderBlock = read_block(&mut file, &idx.unwrap())?;
-    serialize_header(&pbf_header, &mut builder, &mut *stringtable.borrow_mut())?;
+    serialize_header(&pbf_header, &builder, &mut *stringtable.borrow_mut())?;
     ensure!(
         index.next().is_none(),
         "found multiple header blocks, which is not supported."

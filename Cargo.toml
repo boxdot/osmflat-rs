@@ -15,7 +15,7 @@ bytes = "0.4"
 colored = "1.6"
 docopt = "1.0"
 failure = "0.1"
-flatdata = { git = "https://github.com/boxdot/flatdata-rs" }
+flatdata = { git = "https://github.com/boxdot/flatdata-rs", ref = "df86fda4" }
 flate2 = "1.0"
 itertools = "0.7"
 log = "0.4"
