@@ -168,46 +168,47 @@ fn serialize_dense_nodes(
     nodes_id_to_idx: &mut HashMap<i64, u32>,
     tags: &mut TagSerializer,
 ) -> Result<Stats, Error> {
-    let group = &block.primitivegroup[0];
-    let dense_nodes = group.dense.as_ref().unwrap();
+    let mut stats = Stats::default();
+    for group in block.primitivegroup.iter() {
+        let dense_nodes = group.dense.as_ref().unwrap();
 
-    let granularity = block.granularity.unwrap_or(100);
-    let lat_offset = block.lat_offset.unwrap_or(0);
-    let lon_offset = block.lon_offset.unwrap_or(0);
-    let mut lat = 0;
-    let mut lon = 0;
+        let granularity = block.granularity.unwrap_or(100);
+        let lat_offset = block.lat_offset.unwrap_or(0);
+        let lon_offset = block.lon_offset.unwrap_or(0);
+        let mut lat = 0;
+        let mut lon = 0;
 
-    let mut tags_offset = 0;
+        let mut tags_offset = 0;
 
-    let mut id = 0;
-    for i in 0..dense_nodes.id.len() {
-        id += dense_nodes.id[i];
+        let mut id = 0;
+        for i in 0..dense_nodes.id.len() {
+            id += dense_nodes.id[i];
 
-        nodes_id_to_idx.insert(id, nodes.len() as u32);
+            nodes_id_to_idx.insert(id, nodes.len() as u32);
 
-        let mut node = nodes.grow()?;
-        node.set_id(id);
+            let mut node = nodes.grow()?;
+            node.set_id(id);
 
-        lat += dense_nodes.lat[i];
-        lon += dense_nodes.lon[i];
-        node.set_lat(lat_offset + (i64::from(granularity) * lat));
-        node.set_lon(lon_offset + (i64::from(granularity) * lon));
+            lat += dense_nodes.lat[i];
+            lon += dense_nodes.lon[i];
+            node.set_lat(lat_offset + (i64::from(granularity) * lat));
+            node.set_lon(lon_offset + (i64::from(granularity) * lon));
 
-        if tags_offset < dense_nodes.keys_vals.len() {
-            node.set_tag_first_idx(tags.next_index());
-            loop {
-                let k = dense_nodes.keys_vals[tags_offset];
-                if k == 0 {
-                    break; // separator
+            if tags_offset < dense_nodes.keys_vals.len() {
+                node.set_tag_first_idx(tags.next_index());
+                loop {
+                    let k = dense_nodes.keys_vals[tags_offset];
+                    if k == 0 {
+                        break; // separator
+                    }
+                    let v = dense_nodes.keys_vals[tags_offset + 1];
+                    tags_offset += 2;
+                    tags.serialize(&block.stringtable, k as u32, v as u32)?;
                 }
-                let v = dense_nodes.keys_vals[tags_offset + 1];
-                tags_offset += 2;
-                tags.serialize(&block.stringtable, k as u32, v as u32)?;
             }
         }
+        stats.num_nodes += dense_nodes.id.len();
     }
-    let mut stats = Stats::default();
-    stats.num_nodes = dense_nodes.id.len();
     Ok(stats)
 }
 
