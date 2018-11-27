@@ -9,13 +9,12 @@ use failure::Error;
 use flatdata::{Archive, FileResourceStorage};
 use png::HasParameters;
 
-use std::cell::RefCell;
 use std::convert;
 use std::env;
 use std::fs::File;
 use std::io::BufWriter;
 use std::path::Path;
-use std::rc::Rc;
+
 use std::str;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, PartialOrd)]
@@ -258,7 +257,7 @@ fn main() -> Result<(), Error> {
     let osmflat_path = args.next().unwrap();
     let image_path = args.next().unwrap();
 
-    let storage = Rc::new(RefCell::new(FileResourceStorage::new(osmflat_path.into())));
+    let storage = FileResourceStorage::new(osmflat_path.into());
     let archive = osmflat::Osm::open(storage)?;
 
     let image = render(&archive, WIDTH);
