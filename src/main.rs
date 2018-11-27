@@ -47,7 +47,7 @@ use std::str;
 
 fn serialize_header(
     header_block: &osmpbf::HeaderBlock,
-    builder: &mut osmflat::OsmBuilder,
+    builder: &osmflat::OsmBuilder,
     stringtable: &mut StringTable,
 ) -> Result<(), io::Error> {
     let mut header_buf = flatdata::StructBuf::<osmflat::Header>::new();
@@ -98,16 +98,16 @@ fn serialize_header(
 }
 
 /// Holds tags external vector and deduplicates tags.
-struct TagSerializer {
-    tags: flatdata::ExternalVector<osmflat::Tag>,
-    tags_index: flatdata::ExternalVector<osmflat::TagIndex>,
+struct TagSerializer<'a> {
+    tags: flatdata::ExternalVector<'a, osmflat::Tag>,
+    tags_index: flatdata::ExternalVector<'a, osmflat::TagIndex>,
     stringtable: Rc<RefCell<StringTable>>,
     dedup: HashMap<(u32, u32), u32>, // deduplication table: (key_idx, val_idx) -> pos
 }
 
-impl TagSerializer {
+impl<'a> TagSerializer<'a> {
     fn new(
-        builder: &mut osmflat::OsmBuilder,
+        builder: &'a osmflat::OsmBuilder,
         stringtable: Rc<RefCell<StringTable>>,
     ) -> Result<Self, Error> {
         Ok(Self {
@@ -387,16 +387,14 @@ fn run() -> Result<(), Error> {
         .init()
         .unwrap();
 
-    let storage = Rc::new(RefCell::new(FileResourceStorage::new(
-        args.arg_output.clone().into(),
-    )));
-    let mut builder = osmflat::OsmBuilder::new(storage.clone())?;
+    let storage = FileResourceStorage::new(args.arg_output.clone().into());
+    let builder = osmflat::OsmBuilder::new(storage)?;
 
     // TODO: Would be nice not store all these strings in memory, but to flush them
     // from time to time to disk.
     let stringtable = Rc::new(RefCell::new(StringTable::new()));
     stringtable.borrow_mut().push("");
-    let mut tags = TagSerializer::new(&mut builder, stringtable.clone())?;
+    let mut tags = TagSerializer::new(&builder, stringtable.clone())?;
     let infos = builder.start_infos()?; // TODO: Actually put some data in here
     let mut nodes_index = builder.start_nodes_index()?;
     info!("Initialized new osmflat archive at: {}", &args.arg_output);
@@ -428,7 +426,7 @@ fn run() -> Result<(), Error> {
     let mut index = pbf_header.ok_or_else(|| format_err!("missing header block"))?;
     let idx = index.next();
     let pbf_header: osmpbf::HeaderBlock = read_block(&mut file, &idx.unwrap())?;
-    serialize_header(&pbf_header, &mut builder, &mut *stringtable.borrow_mut())?;
+    serialize_header(&pbf_header, &builder, &mut *stringtable.borrow_mut())?;
     ensure!(
         index.next().is_none(),
         "found multiple header blocks, which is not supported."
