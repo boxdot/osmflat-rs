@@ -1,5 +1,4 @@
 use byteorder::{ByteOrder, NetworkEndian};
-use failure::Error;
 use flate2::read::ZlibDecoder;
 use prost::{self, Message};
 
@@ -88,7 +87,7 @@ struct BlockIndexIterator {
 }
 
 impl BlockIndexIterator {
-    fn new<P: AsRef<Path>>(path: P) -> Result<Self, Error> {
+    fn new<P: AsRef<Path>>(path: P) -> Result<Self, io::Error> {
         let file = File::open(path)?;
         Ok(Self {
             reader: BufReader::new(file),
@@ -182,7 +181,7 @@ impl Iterator for BlockIndexIterator {
 pub fn read_block<F: Read + Seek, T: prost::Message + Default>(
     reader: &mut F,
     idx: &BlockIndex,
-) -> Result<T, Error> {
+) -> Result<T, io::Error> {
     reader.seek(io::SeekFrom::Start(idx.blob_start as u64))?;
 
     // TODO: allocate buffers outside of the function
@@ -202,7 +201,10 @@ pub fn read_block<F: Read + Seek, T: prost::Message + Default>(
         decoder.read_to_end(&mut blob_buf)?;
         &blob_buf
     } else {
-        return Err(format_err!("invalid input data: unknown compression"));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "unknown compression",
+        ));
     };
     Ok(T::decode(blob_data)?)
 }
@@ -211,7 +213,7 @@ pub fn read_block<F: Read + Seek, T: prost::Message + Default>(
 ///
 /// The index is sorted lexicographically by block type and position in the pbf
 /// file.
-pub fn build_block_index<P: AsRef<Path>>(path: P) -> Result<Vec<BlockIndex>, Error> {
+pub fn build_block_index<P: AsRef<Path>>(path: P) -> Result<Vec<BlockIndex>, io::Error> {
     let mut index: Vec<_> = BlockIndexIterator::new(path)?
         .filter_map(|block| match block {
             Ok(b) => Some(b),

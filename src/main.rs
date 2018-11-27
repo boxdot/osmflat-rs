@@ -1,7 +1,6 @@
 extern crate byteorder;
 extern crate bytes;
 extern crate colored;
-extern crate docopt;
 #[macro_use]
 extern crate failure;
 extern crate flate2;
@@ -17,9 +16,9 @@ extern crate pbr;
 #[cfg(test)]
 #[macro_use]
 extern crate proptest;
-#[macro_use]
-extern crate serde_derive;
 extern crate stderrlog;
+#[macro_use]
+extern crate structopt;
 
 mod args;
 mod ids;
@@ -28,7 +27,6 @@ mod osmpbf;
 mod stats;
 mod strings;
 
-use args::parse_args;
 use osmpbf::{build_block_index, read_block, BlockIndex, BlockType};
 use stats::Stats;
 use strings::StringTable;
@@ -38,6 +36,7 @@ use failure::Error;
 use flatdata::{ArchiveBuilder, FileResourceStorage};
 use itertools::Itertools;
 use pbr::ProgressBar;
+use structopt::StructOpt;
 
 use std::cell::RefCell;
 use std::collections::{hash_map, HashMap};
@@ -110,7 +109,7 @@ impl<'a> TagSerializer<'a> {
     fn new(
         builder: &'a osmflat::OsmBuilder,
         stringtable: Rc<RefCell<StringTable>>,
-    ) -> Result<Self, Error> {
+    ) -> Result<Self, io::Error> {
         Ok(Self {
             tags: builder.start_tags()?,
             tags_index: builder.start_tags_index()?,
@@ -381,15 +380,15 @@ fn serialize_relations(
 }
 
 fn run() -> Result<(), Error> {
-    let args = parse_args();
+    let args = args::Args::from_args();
     stderrlog::new()
         .module(module_path!())
         .timestamp(stderrlog::Timestamp::Second)
-        .verbosity(args.flag_verbose + 2)
+        .verbosity(args.verbose as usize + 2)
         .init()
         .unwrap();
 
-    let storage = FileResourceStorage::new(args.arg_output.clone().into());
+    let storage = FileResourceStorage::new(args.output.clone());
     let builder = osmflat::OsmBuilder::new(storage)?;
 
     // TODO: Would be nice not store all these strings in memory, but to flush them
@@ -399,10 +398,13 @@ fn run() -> Result<(), Error> {
     let mut tags = TagSerializer::new(&builder, stringtable.clone())?;
     let infos = builder.start_infos()?; // TODO: Actually put some data in here
     let mut nodes_index = builder.start_nodes_index()?;
-    info!("Initialized new osmflat archive at: {}", &args.arg_output);
+    info!(
+        "Initialized new osmflat archive at: {}",
+        &args.output.display()
+    );
 
     info!("Building index of PBF blocks...");
-    let block_index = build_block_index(args.arg_input.clone())?;
+    let block_index = build_block_index(&args.input)?;
 
     // TODO: move out into a function
     let groups = block_index.into_iter().group_by(|b| b.block_type);
@@ -422,7 +424,7 @@ fn run() -> Result<(), Error> {
     }
     info!("PBF block index built.");
 
-    let mut file = File::open(args.arg_input)?;
+    let mut file = File::open(args.input)?;
 
     // Serialize header
     let mut index = pbf_header.ok_or_else(|| format_err!("missing header block"))?;
