@@ -223,26 +223,29 @@ fn blob_type_from_blob_info(
     })
 }
 
+pub fn build_block_index<P: AsRef<Path>>(path: P) -> io::Result<Vec<BlockIndex>> {
     let iter = Mutex::new(BlockIndexIterator::new(path)?);
     let result = Mutex::new(Vec::new());
+    let num_tasks = 2 * rayon::current_num_threads();
+    info!(
+        "Building block index with {} parallel task(s)...",
+        num_tasks
+    );
     rayon::scope(|s| {
-        for _ in 1..*rayon::current_num_threads() {
-            s.spawn(|_| {
-                info!("Started processing thread");
-                loop {
-                    let blob = iter.lock().unwrap().next();
-                    let block = match blob {
-                        Some(Ok(BlobInfo::Unknown(start, len, blob))) => {
-                            blob_type_from_blob_info(start, len, blob)
-                        }
-                        Some(Ok(BlobInfo::Header(b))) => Ok(b),
-                        Some(Err(e)) => Err(e),
-                        None => break,
-                    };
-                    match block {
-                        Ok(b) => result.lock().unwrap().push(b),
-                        Err(e) => eprintln!("Skipping block due to error: {}", e),
+        for _ in 1..num_tasks {
+            s.spawn(|_| loop {
+                let blob = iter.lock().unwrap().next();
+                let block = match blob {
+                    Some(Ok(BlobInfo::Unknown(start, len, blob))) => {
+                        blob_type_from_blob_info(start, len, blob)
                     }
+                    Some(Ok(BlobInfo::Header(b))) => Ok(b),
+                    Some(Err(e)) => Err(e),
+                    None => break,
+                };
+                match block {
+                    Ok(b) => result.lock().unwrap().push(b),
+                    Err(e) => eprintln!("Skipping block due to error: {}", e),
                 }
             });
         }
