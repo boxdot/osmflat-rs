@@ -99,7 +99,7 @@ fn serialize_header(
 struct TagSerializer<'a> {
     tags: flatdata::ExternalVector<'a, osmflat::Tag>,
     tags_index: flatdata::ExternalVector<'a, osmflat::TagIndex>,
-    dedup: HashMap<(u32, u32), u32>, // deduplication table: (key_idx, val_idx) -> pos
+    dedup: HashMap<(u64, u64), u64>, // deduplication table: (key_idx, val_idx) -> pos
 }
 
 impl<'a> TagSerializer<'a> {
@@ -111,11 +111,11 @@ impl<'a> TagSerializer<'a> {
         })
     }
 
-    fn serialize(&mut self, key_idx: u32, val_idx: u32) -> Result<(), Error> {
+    fn serialize(&mut self, key_idx: u64, val_idx: u64) -> Result<(), Error> {
         let idx = match self.dedup.entry((key_idx, val_idx)) {
             hash_map::Entry::Occupied(entry) => *entry.get(),
             hash_map::Entry::Vacant(entry) => {
-                let idx = self.tags.len() as u32;
+                let idx = self.tags.len() as u64;
                 let mut tag = self.tags.grow()?;
                 tag.set_key_idx(key_idx);
                 tag.set_value_idx(val_idx);
@@ -130,8 +130,8 @@ impl<'a> TagSerializer<'a> {
         Ok(())
     }
 
-    fn next_index(&self) -> u32 {
-        self.tags_index.len() as u32
+    fn next_index(&self) -> u64 {
+        self.tags_index.len() as u64
     }
 
     fn close(self) {
@@ -149,7 +149,7 @@ impl<'a> TagSerializer<'a> {
 fn add_string_table(
     pbf_stringtable: &osmpbf::StringTable,
     stringtable: &mut StringTable,
-) -> Result<Vec<u32>, Error> {
+) -> Result<Vec<u64>, Error> {
     let mut result = Vec::new();
     for x in &pbf_stringtable.s {
         let string = str::from_utf8(&x)?;
@@ -242,7 +242,7 @@ fn serialize_ways(
 
             // TODO: serialize info
 
-            way.set_ref_first_idx(nodes_index.len() as u32);
+            way.set_ref_first_idx(nodes_index.len() as u64);
             let mut node_ref = 0;
             for delta in &pbf_way.refs {
                 node_ref += delta;
@@ -286,7 +286,7 @@ fn serialize_relations(
     relations_id_to_idx: &ids::IdTable,
     stringtable: &mut StringTable,
     relations: &mut flatdata::ExternalVector<osmflat::Relation>,
-    relation_members: &mut flatdata::MultiVector<osmflat::IndexType32, osmflat::RelationMembers>,
+    relation_members: &mut flatdata::MultiVector<osmflat::IndexType40, osmflat::RelationMembers>,
     tags: &mut TagSerializer,
 ) -> Result<Stats, Error> {
     let mut stats = Stats::default();
@@ -498,7 +498,7 @@ fn run() -> Result<(), Error> {
         {
             let mut sentinel = ways.grow()?;
             sentinel.set_tag_first_idx(tags.next_index());
-            sentinel.set_ref_first_idx(nodes_index.len() as u32);
+            sentinel.set_ref_first_idx(nodes_index.len() as u64);
         }
         ways.close()?;
         pb.finish();

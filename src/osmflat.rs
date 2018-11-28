@@ -10,15 +10,15 @@ struct Header
     bbox_right : i64 : 64;
     bbox_top : i64 : 64;
     bbox_bottom : i64 : 64;
-    required_feature_first_idx : u32 : 32;
+    required_feature_first_idx : u64 : 40;
     required_features_size : u32 : 4;
-    optional_feature_first_idx : u32 : 32;
+    optional_feature_first_idx : u64 : 40;
     optional_features_size : u32 : 4;
-    writingprogram_idx : u32 : 32;
-    source_idx : u32 : 32;
+    writingprogram_idx : u64 : 40;
+    source_idx : u64 : 40;
     osmosis_replication_timestamp : i64 : 64;
     osmosis_replication_sequence_number : i64 : 64;
-    osmosis_replication_base_url_idx : u32 : 32;
+    osmosis_replication_base_url_idx : u64 : 40;
 }
 }
 
@@ -30,7 +30,7 @@ struct Info
     timestamp : i64 : 64;
     changest : i64 : 64;
     uid : i32 : 32;
-    user_idx : u32 : 32;
+    user_idx : u64 : 40;
     visible : bool : 1;
 }
 }
@@ -39,8 +39,8 @@ struct Info
         pub const TAG: &str = r#"namespace osm {
 struct Tag
 {
-    key_idx : u32 : 32;
-    value_idx : u32 : 32;
+    key_idx : u64 : 40;
+    value_idx : u64 : 40;
 }
 }
 
@@ -51,8 +51,8 @@ struct Node
     id : i64 : 64;
     lat : i64 : 64;
     lon : i64 : 64;
-    tag_first_idx : u32 : 32;
-    info_idx : u32 : 32;
+    tag_first_idx : u64 : 40;
+    info_idx : u64 : 40;
 }
 }
 
@@ -60,7 +60,7 @@ struct Node
         pub const NODE_INDEX: &str = r#"namespace osm {
 struct NodeIndex
 {
-    value : u32 : 32;
+    value : u64 : 40;
 }
 }
 
@@ -69,9 +69,9 @@ struct NodeIndex
 struct Way
 {
     id : i64 : 64;
-    tag_first_idx : u32 : 32;
-    ref_first_idx : u32 : 32;
-    info_idx : u32 : 32;
+    tag_first_idx : u64 : 40;
+    ref_first_idx : u64 : 40;
+    info_idx : u64 : 40;
 }
 }
 
@@ -79,7 +79,7 @@ struct Way
         pub const TAG_INDEX: &str = r#"namespace osm {
 struct TagIndex
 {
-    value : u32 : 32;
+    value : u64 : 40;
 }
 }
 
@@ -87,8 +87,8 @@ struct TagIndex
         pub const NODE_MEMBER: &str = r#"namespace osm {
 struct NodeMember
 {
-    node_idx : u32 : 32;
-    role_idx : u32 : 32;
+    node_idx : u64 : 40;
+    role_idx : u64 : 40;
 }
 }
 
@@ -96,8 +96,8 @@ struct NodeMember
         pub const WAY_MEMBER: &str = r#"namespace osm {
 struct WayMember
 {
-    way_idx : u32 : 32;
-    role_idx : u32 : 32;
+    way_idx : u64 : 40;
+    role_idx : u64 : 40;
 }
 }
 
@@ -105,8 +105,8 @@ struct WayMember
         pub const RELATION_MEMBER: &str = r#"namespace osm {
 struct RelationMember
 {
-    relation_idx : u32 : 32;
-    role_idx : u32 : 32;
+    relation_idx : u64 : 40;
+    role_idx : u64 : 40;
 }
 }
 
@@ -115,13 +115,13 @@ struct RelationMember
 struct Relation
 {
     id : i64 : 64;
-    tag_first_idx : u32 : 32;
-    info_idx : u32 : 32;
+    tag_first_idx : u64 : 40;
+    info_idx : u64 : 40;
 }
 }
 
 "#;
-        pub const INDEX_TYPE32: &str = r#""#;
+        pub const INDEX_TYPE40: &str = r#""#;
         pub const OSM: &str = r#"namespace osm {
 struct Header
 {
@@ -129,15 +129,15 @@ struct Header
     bbox_right : i64 : 64;
     bbox_top : i64 : 64;
     bbox_bottom : i64 : 64;
-    required_feature_first_idx : u32 : 32;
+    required_feature_first_idx : u64 : 40;
     required_features_size : u32 : 4;
-    optional_feature_first_idx : u32 : 32;
+    optional_feature_first_idx : u64 : 40;
     optional_features_size : u32 : 4;
-    writingprogram_idx : u32 : 32;
-    source_idx : u32 : 32;
+    writingprogram_idx : u64 : 40;
+    source_idx : u64 : 40;
     osmosis_replication_timestamp : i64 : 64;
     osmosis_replication_sequence_number : i64 : 64;
-    osmosis_replication_base_url_idx : u32 : 32;
+    osmosis_replication_base_url_idx : u64 : 40;
 }
 }
 
@@ -147,8 +147,8 @@ struct Node
     id : i64 : 64;
     lat : i64 : 64;
     lon : i64 : 64;
-    tag_first_idx : u32 : 32;
-    info_idx : u32 : 32;
+    tag_first_idx : u64 : 40;
+    info_idx : u64 : 40;
 }
 }
 
@@ -156,9 +156,9 @@ namespace osm {
 struct Way
 {
     id : i64 : 64;
-    tag_first_idx : u32 : 32;
-    ref_first_idx : u32 : 32;
-    info_idx : u32 : 32;
+    tag_first_idx : u64 : 40;
+    ref_first_idx : u64 : 40;
+    info_idx : u64 : 40;
 }
 }
 
@@ -166,40 +166,40 @@ namespace osm {
 struct Relation
 {
     id : i64 : 64;
-    tag_first_idx : u32 : 32;
-    info_idx : u32 : 32;
+    tag_first_idx : u64 : 40;
+    info_idx : u64 : 40;
 }
 }
 
 namespace osm {
 struct NodeMember
 {
-    node_idx : u32 : 32;
-    role_idx : u32 : 32;
+    node_idx : u64 : 40;
+    role_idx : u64 : 40;
 }
 }
 
 namespace osm {
 struct WayMember
 {
-    way_idx : u32 : 32;
-    role_idx : u32 : 32;
+    way_idx : u64 : 40;
+    role_idx : u64 : 40;
 }
 }
 
 namespace osm {
 struct RelationMember
 {
-    relation_idx : u32 : 32;
-    role_idx : u32 : 32;
+    relation_idx : u64 : 40;
+    role_idx : u64 : 40;
 }
 }
 
 namespace osm {
 struct Tag
 {
-    key_idx : u32 : 32;
-    value_idx : u32 : 32;
+    key_idx : u64 : 40;
+    value_idx : u64 : 40;
 }
 }
 
@@ -210,7 +210,7 @@ struct Info
     timestamp : i64 : 64;
     changest : i64 : 64;
     uid : i32 : 32;
-    user_idx : u32 : 32;
+    user_idx : u64 : 40;
     visible : bool : 1;
 }
 }
@@ -218,19 +218,19 @@ struct Info
 namespace osm {
 struct TagIndex
 {
-    value : u32 : 32;
+    value : u64 : 40;
 }
 }
 
 namespace osm {
 struct NodeIndex
 {
-    value : u32 : 32;
+    value : u64 : 40;
 }
 }
 
 namespace osm {
-const u32 INVALID_IDX = 0;
+const u64 INVALID_IDX = 1099511627775;
 }
 
 namespace osm {
@@ -259,7 +259,7 @@ archive Osm
     @explicit_reference( .osm.WayMember.role_idx, .osm.Osm.stringtable )
     @explicit_reference( .osm.RelationMember.relation_idx, .osm.Osm.relations )
     @explicit_reference( .osm.RelationMember.role_idx, .osm.Osm.stringtable )
-    relation_members : multivector< 32, .osm.NodeMember, .osm.WayMember, .osm.RelationMember >;
+    relation_members : multivector< 40, .osm.NodeMember, .osm.WayMember, .osm.RelationMember >;
     @explicit_reference( .osm.Tag.key_idx, .osm.Osm.stringtable )
     @explicit_reference( .osm.Tag.value_idx, .osm.Osm.stringtable )
     tags : vector< .osm.Tag >;
@@ -285,15 +285,15 @@ struct Header
     bbox_right : i64 : 64;
     bbox_top : i64 : 64;
     bbox_bottom : i64 : 64;
-    required_feature_first_idx : u32 : 32;
+    required_feature_first_idx : u64 : 40;
     required_features_size : u32 : 4;
-    optional_feature_first_idx : u32 : 32;
+    optional_feature_first_idx : u64 : 40;
     optional_features_size : u32 : 4;
-    writingprogram_idx : u32 : 32;
-    source_idx : u32 : 32;
+    writingprogram_idx : u64 : 40;
+    source_idx : u64 : 40;
     osmosis_replication_timestamp : i64 : 64;
     osmosis_replication_sequence_number : i64 : 64;
-    osmosis_replication_base_url_idx : u32 : 32;
+    osmosis_replication_base_url_idx : u64 : 40;
 }
 }
 
@@ -316,8 +316,8 @@ struct Node
     id : i64 : 64;
     lat : i64 : 64;
     lon : i64 : 64;
-    tag_first_idx : u32 : 32;
-    info_idx : u32 : 32;
+    tag_first_idx : u64 : 40;
+    info_idx : u64 : 40;
 }
 }
 
@@ -335,9 +335,9 @@ pub const WAYS: &str = r#"namespace osm {
 struct Way
 {
     id : i64 : 64;
-    tag_first_idx : u32 : 32;
-    ref_first_idx : u32 : 32;
-    info_idx : u32 : 32;
+    tag_first_idx : u64 : 40;
+    ref_first_idx : u64 : 40;
+    info_idx : u64 : 40;
 }
 }
 
@@ -356,8 +356,8 @@ pub const RELATIONS: &str = r#"namespace osm {
 struct Relation
 {
     id : i64 : 64;
-    tag_first_idx : u32 : 32;
-    info_idx : u32 : 32;
+    tag_first_idx : u64 : 40;
+    info_idx : u64 : 40;
 }
 }
 
@@ -374,24 +374,24 @@ archive Osm
 pub const RELATION_MEMBERS: &str = r#"namespace osm {
 struct NodeMember
 {
-    node_idx : u32 : 32;
-    role_idx : u32 : 32;
+    node_idx : u64 : 40;
+    role_idx : u64 : 40;
 }
 }
 
 namespace osm {
 struct WayMember
 {
-    way_idx : u32 : 32;
-    role_idx : u32 : 32;
+    way_idx : u64 : 40;
+    role_idx : u64 : 40;
 }
 }
 
 namespace osm {
 struct RelationMember
 {
-    relation_idx : u32 : 32;
-    role_idx : u32 : 32;
+    relation_idx : u64 : 40;
+    role_idx : u64 : 40;
 }
 }
 
@@ -404,7 +404,7 @@ archive Osm
     @explicit_reference( .osm.WayMember.role_idx, .osm.Osm.stringtable )
     @explicit_reference( .osm.RelationMember.relation_idx, .osm.Osm.relations )
     @explicit_reference( .osm.RelationMember.role_idx, .osm.Osm.stringtable )
-    relation_members : multivector< 32, .osm.NodeMember, .osm.WayMember, .osm.RelationMember >;
+    relation_members : multivector< 40, .osm.NodeMember, .osm.WayMember, .osm.RelationMember >;
 }
 }
 
@@ -412,8 +412,8 @@ archive Osm
 pub const TAGS: &str = r#"namespace osm {
 struct Tag
 {
-    key_idx : u32 : 32;
-    value_idx : u32 : 32;
+    key_idx : u64 : 40;
+    value_idx : u64 : 40;
 }
 }
 
@@ -434,7 +434,7 @@ struct Info
     timestamp : i64 : 64;
     changest : i64 : 64;
     uid : i32 : 32;
-    user_idx : u32 : 32;
+    user_idx : u64 : 40;
     visible : bool : 1;
 }
 }
@@ -451,7 +451,7 @@ archive Osm
 pub const TAGS_INDEX: &str = r#"namespace osm {
 struct TagIndex
 {
-    value : u32 : 32;
+    value : u64 : 40;
 }
 }
 
@@ -467,7 +467,7 @@ archive Osm
 pub const NODES_INDEX: &str = r#"namespace osm {
 struct NodeIndex
 {
-    value : u32 : 32;
+    value : u64 : 40;
 }
 }
 
@@ -492,27 +492,28 @@ archive Osm
     }
 }
 
-pub const INVALID_IDX: u32 = 0;
+// Max 40 bits value used to indicate null references
+pub const INVALID_IDX: u64 = 1099511627775;
 
 define_struct!(
     Header,
     RefHeader,
     RefMutHeader,
     schema::structs::HEADER,
-    69,
+    74,
     (bbox_left, set_bbox_left, i64, 0, 64),
     (bbox_right, set_bbox_right, i64, 64, 64),
     (bbox_top, set_bbox_top, i64, 128, 64),
     (bbox_bottom, set_bbox_bottom, i64, 192, 64),
-    (required_feature_first_idx, set_required_feature_first_idx, u32, 256, 32),
-    (required_features_size, set_required_features_size, u32, 288, 4),
-    (optional_feature_first_idx, set_optional_feature_first_idx, u32, 292, 32),
-    (optional_features_size, set_optional_features_size, u32, 324, 4),
-    (writingprogram_idx, set_writingprogram_idx, u32, 328, 32),
-    (source_idx, set_source_idx, u32, 360, 32),
-    (osmosis_replication_timestamp, set_osmosis_replication_timestamp, i64, 392, 64),
-    (osmosis_replication_sequence_number, set_osmosis_replication_sequence_number, i64, 456, 64),
-    (osmosis_replication_base_url_idx, set_osmosis_replication_base_url_idx, u32, 520, 32));
+    (required_feature_first_idx, set_required_feature_first_idx, u64, 256, 40),
+    (required_features_size, set_required_features_size, u32, 296, 4),
+    (optional_feature_first_idx, set_optional_feature_first_idx, u64, 300, 40),
+    (optional_features_size, set_optional_features_size, u32, 340, 4),
+    (writingprogram_idx, set_writingprogram_idx, u64, 344, 40),
+    (source_idx, set_source_idx, u64, 384, 40),
+    (osmosis_replication_timestamp, set_osmosis_replication_timestamp, i64, 424, 64),
+    (osmosis_replication_sequence_number, set_osmosis_replication_sequence_number, i64, 488, 64),
+    (osmosis_replication_base_url_idx, set_osmosis_replication_base_url_idx, u64, 552, 40));
 
 
 define_struct!(
@@ -520,13 +521,13 @@ define_struct!(
     RefInfo,
     RefMutInfo,
     schema::structs::INFO,
-    29,
+    30,
     (version, set_version, i32, 0, 32),
     (timestamp, set_timestamp, i64, 32, 64),
     (changest, set_changest, i64, 96, 64),
     (uid, set_uid, i32, 160, 32),
-    (user_idx, set_user_idx, u32, 192, 32),
-    (visible, set_visible, bool, 224, 1));
+    (user_idx, set_user_idx, u64, 192, 40),
+    (visible, set_visible, bool, 232, 1));
 
 
 define_struct!(
@@ -534,9 +535,9 @@ define_struct!(
     RefTag,
     RefMutTag,
     schema::structs::TAG,
-    8,
-    (key_idx, set_key_idx, u32, 0, 32),
-    (value_idx, set_value_idx, u32, 32, 32));
+    10,
+    (key_idx, set_key_idx, u64, 0, 40),
+    (value_idx, set_value_idx, u64, 40, 40));
 
 
 define_struct!(
@@ -544,12 +545,12 @@ define_struct!(
     RefNode,
     RefMutNode,
     schema::structs::NODE,
-    32,
+    34,
     (id, set_id, i64, 0, 64),
     (lat, set_lat, i64, 64, 64),
     (lon, set_lon, i64, 128, 64),
-    (tag_first_idx, set_tag_first_idx, u32, 192, 32),
-    (info_idx, set_info_idx, u32, 224, 32));
+    (tag_first_idx, set_tag_first_idx, u64, 192, 40),
+    (info_idx, set_info_idx, u64, 232, 40));
 
 /// A struct indexing a node.
 define_struct!(
@@ -557,8 +558,8 @@ define_struct!(
     RefNodeIndex,
     RefMutNodeIndex,
     schema::structs::NODE_INDEX,
-    4,
-    (value, set_value, u32, 0, 32));
+    5,
+    (value, set_value, u64, 0, 40));
 
 
 define_struct!(
@@ -566,11 +567,11 @@ define_struct!(
     RefWay,
     RefMutWay,
     schema::structs::WAY,
-    20,
+    23,
     (id, set_id, i64, 0, 64),
-    (tag_first_idx, set_tag_first_idx, u32, 64, 32),
-    (ref_first_idx, set_ref_first_idx, u32, 96, 32),
-    (info_idx, set_info_idx, u32, 128, 32));
+    (tag_first_idx, set_tag_first_idx, u64, 64, 40),
+    (ref_first_idx, set_ref_first_idx, u64, 104, 40),
+    (info_idx, set_info_idx, u64, 144, 40));
 
 /// A struct indexing a tag.
 define_struct!(
@@ -578,8 +579,8 @@ define_struct!(
     RefTagIndex,
     RefMutTagIndex,
     schema::structs::TAG_INDEX,
-    4,
-    (value, set_value, u32, 0, 32));
+    5,
+    (value, set_value, u64, 0, 40));
 
 
 define_struct!(
@@ -587,9 +588,9 @@ define_struct!(
     RefNodeMember,
     RefMutNodeMember,
     schema::structs::NODE_MEMBER,
-    8,
-    (node_idx, set_node_idx, u32, 0, 32),
-    (role_idx, set_role_idx, u32, 32, 32));
+    10,
+    (node_idx, set_node_idx, u64, 0, 40),
+    (role_idx, set_role_idx, u64, 40, 40));
 
 
 define_struct!(
@@ -597,9 +598,9 @@ define_struct!(
     RefWayMember,
     RefMutWayMember,
     schema::structs::WAY_MEMBER,
-    8,
-    (way_idx, set_way_idx, u32, 0, 32),
-    (role_idx, set_role_idx, u32, 32, 32));
+    10,
+    (way_idx, set_way_idx, u64, 0, 40),
+    (role_idx, set_role_idx, u64, 40, 40));
 
 
 define_struct!(
@@ -607,9 +608,9 @@ define_struct!(
     RefRelationMember,
     RefMutRelationMember,
     schema::structs::RELATION_MEMBER,
-    8,
-    (relation_idx, set_relation_idx, u32, 0, 32),
-    (role_idx, set_role_idx, u32, 32, 32));
+    10,
+    (relation_idx, set_relation_idx, u64, 0, 40),
+    (role_idx, set_role_idx, u64, 40, 40));
 
 
 define_struct!(
@@ -617,25 +618,25 @@ define_struct!(
     RefRelation,
     RefMutRelation,
     schema::structs::RELATION,
-    16,
+    18,
     (id, set_id, i64, 0, 64),
-    (tag_first_idx, set_tag_first_idx, u32, 64, 32),
-    (info_idx, set_info_idx, u32, 96, 32));
+    (tag_first_idx, set_tag_first_idx, u64, 64, 40),
+    (info_idx, set_info_idx, u64, 104, 40));
 
 /// Builtin type to for MultiVector index
 define_index!(
-    IndexType32,
-    RefIndexType32,
-    RefMutIndexType32,
-    schema::structs::INDEX_TYPE32,
-    4,
-    32
+    IndexType40,
+    RefIndexType40,
+    RefMutIndexType40,
+    schema::structs::INDEX_TYPE40,
+    5,
+    40
 );
 
 
 /// Builtin union type of NodeMember, WayMember, RelationMember.
 define_variadic_struct!(RelationMembers, RefRelationMembers, BuilderRelationMembers,
-    IndexType32,
+    IndexType40,
     0 => (NodeMember, add_node_member),
     1 => (WayMember, add_way_member),
     2 => (RelationMember, add_relation_member));
@@ -663,7 +664,7 @@ define_archive!(Osm, OsmBuilder,
     // multivector resources
     (relation_members, start_relation_members,
         RelationMembers, schema::resources::osm::RELATION_MEMBERS,
-        relation_members_index, IndexType32, false);
+        relation_members_index, IndexType40, false);
     // raw data resources
     (stringtable, set_stringtable,
         schema::resources::osm::STRINGTABLE, false);
