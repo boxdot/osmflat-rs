@@ -39,11 +39,9 @@ use flatdata::{ArchiveBuilder, FileResourceStorage};
 use itertools::Itertools;
 use pbr::ProgressBar;
 
-use std::cell::RefCell;
 use std::collections::{hash_map, HashMap};
 use std::fs::File;
 use std::io::{self, Read, Seek};
-use std::rc::Rc;
 use std::str;
 
 fn serialize_header(
@@ -102,35 +100,19 @@ fn serialize_header(
 struct TagSerializer<'a> {
     tags: flatdata::ExternalVector<'a, osmflat::Tag>,
     tags_index: flatdata::ExternalVector<'a, osmflat::TagIndex>,
-    stringtable: Rc<RefCell<StringTable>>,
     dedup: HashMap<(u32, u32), u32>, // deduplication table: (key_idx, val_idx) -> pos
 }
 
 impl<'a> TagSerializer<'a> {
-    fn new(
-        builder: &'a osmflat::OsmBuilder,
-        stringtable: Rc<RefCell<StringTable>>,
-    ) -> Result<Self, Error> {
+    fn new(builder: &'a osmflat::OsmBuilder) -> Result<Self, Error> {
         Ok(Self {
             tags: builder.start_tags()?,
             tags_index: builder.start_tags_index()?,
-            stringtable,
             dedup: HashMap::new(),
         })
     }
 
-    fn serialize(
-        &mut self,
-        pbf_stringtable: &osmpbf::StringTable,
-        k: u32,
-        v: u32,
-    ) -> Result<(), Error> {
-        let key = str::from_utf8(&pbf_stringtable.s[k as usize])?;
-        let val = str::from_utf8(&pbf_stringtable.s[v as usize])?;
-
-        let key_idx = self.stringtable.borrow_mut().insert(key);
-        let val_idx = self.stringtable.borrow_mut().insert(val);
-
+    fn serialize(&mut self, key_idx: u32, val_idx: u32) -> Result<(), Error> {
         let idx = match self.dedup.entry((key_idx, val_idx)) {
             hash_map::Entry::Occupied(entry) => *entry.get(),
             hash_map::Entry::Vacant(entry) => {
@@ -163,13 +145,29 @@ impl<'a> TagSerializer<'a> {
     }
 }
 
+/// adds all strings in a table to the lookup and returns a vectors of
+/// references to be used instead
+fn add_string_table(
+    pbf_stringtable: &osmpbf::StringTable,
+    stringtable: &mut StringTable,
+) -> Result<Vec<u32>, Error> {
+    let mut result = Vec::new();
+    for x in &pbf_stringtable.s {
+        let string = str::from_utf8(&x)?;
+        result.push(stringtable.insert(string));
+    }
+    Ok(result)
+}
+
 fn serialize_dense_nodes(
     block: &osmpbf::PrimitiveBlock,
     nodes: &mut flatdata::ExternalVector<osmflat::Node>,
     nodes_id_to_idx: &mut ids::IdTableBuilder,
+    stringtable: &mut StringTable,
     tags: &mut TagSerializer,
 ) -> Result<Stats, Error> {
     let mut stats = Stats::default();
+    let string_refs = add_string_table(&block.stringtable, stringtable)?;
     for group in block.primitivegroup.iter() {
         let dense_nodes = group.dense.as_ref().unwrap();
 
@@ -205,7 +203,7 @@ fn serialize_dense_nodes(
                     }
                     let v = dense_nodes.keys_vals[tags_offset + 1];
                     tags_offset += 2;
-                    tags.serialize(&block.stringtable, k as u32, v as u32)?;
+                    tags.serialize(string_refs[k as usize], string_refs[v as usize])?;
                 }
             }
         }
@@ -219,10 +217,12 @@ fn serialize_ways(
     nodes_id_to_idx: &ids::IdTable,
     ways: &mut flatdata::ExternalVector<osmflat::Way>,
     ways_id_to_idx: &mut ids::IdTableBuilder,
+    stringtable: &mut StringTable,
     tags: &mut TagSerializer,
     nodes_index: &mut flatdata::ExternalVector<osmflat::NodeIndex>,
 ) -> Result<Stats, Error> {
     let mut stats = Stats::default();
+    let string_refs = add_string_table(&block.stringtable, stringtable)?;
     for group in &block.primitivegroup {
         for pbf_way in &group.ways {
             let index = ways_id_to_idx.insert(pbf_way.id as u64);
@@ -235,7 +235,10 @@ fn serialize_ways(
             way.set_tag_first_idx(tags.next_index());
 
             for i in 0..pbf_way.keys.len() {
-                tags.serialize(&block.stringtable, pbf_way.keys[i], pbf_way.vals[i])?;
+                tags.serialize(
+                    string_refs[pbf_way.keys[i] as usize],
+                    string_refs[pbf_way.vals[i] as usize],
+                )?;
             }
 
             // TODO: serialize info
@@ -282,12 +285,13 @@ fn serialize_relations(
     nodes_id_to_idx: &ids::IdTable,
     ways_id_to_idx: &ids::IdTable,
     relations_id_to_idx: &ids::IdTable,
+    stringtable: &mut StringTable,
     relations: &mut flatdata::ExternalVector<osmflat::Relation>,
     relation_members: &mut flatdata::MultiVector<osmflat::IndexType32, osmflat::RelationMembers>,
     tags: &mut TagSerializer,
-    stringtable: &Rc<RefCell<StringTable>>,
 ) -> Result<Stats, Error> {
     let mut stats = Stats::default();
+    let string_refs = add_string_table(&block.stringtable, stringtable)?;
     for group in &block.primitivegroup {
         for pbf_relation in &group.relations {
             let mut relation = relations.grow()?;
@@ -301,9 +305,8 @@ fn serialize_relations(
             relation.set_tag_first_idx(tags.next_index());
             for i in 0..pbf_relation.keys.len() {
                 tags.serialize(
-                    &block.stringtable,
-                    pbf_relation.keys[i],
-                    pbf_relation.vals[i],
+                    string_refs[pbf_relation.keys[i] as usize],
+                    string_refs[pbf_relation.vals[i] as usize],
                 )?;
             }
 
@@ -335,10 +338,7 @@ fn serialize_relations(
 
                         let mut member = members.add_node_member();
                         member.set_node_idx(idx);
-                        let role = str::from_utf8(
-                            &block.stringtable.s[pbf_relation.roles_sid[i] as usize],
-                        )?;
-                        member.set_role_idx(stringtable.borrow_mut().insert(role));
+                        member.set_role_idx(string_refs[pbf_relation.roles_sid[i] as usize]);
                     }
                     osmpbf::relation::MemberType::Way => {
                         let idx = match ways_id_to_idx.get(memid as u64) {
@@ -351,10 +351,7 @@ fn serialize_relations(
 
                         let mut member = members.add_way_member();
                         member.set_way_idx(idx);
-                        let role = str::from_utf8(
-                            &block.stringtable.s[pbf_relation.roles_sid[i] as usize],
-                        )?;
-                        member.set_role_idx(stringtable.borrow_mut().insert(role));
+                        member.set_role_idx(string_refs[pbf_relation.roles_sid[i] as usize]);
                     }
                     osmpbf::relation::MemberType::Relation => {
                         let idx = match relations_id_to_idx.get(memid as u64) {
@@ -367,10 +364,7 @@ fn serialize_relations(
 
                         let mut member = members.add_relation_member();
                         member.set_relation_idx(idx);
-                        let role = str::from_utf8(
-                            &block.stringtable.s[pbf_relation.roles_sid[i] as usize],
-                        )?;
-                        member.set_role_idx(stringtable.borrow_mut().insert(role));
+                        member.set_role_idx(string_refs[pbf_relation.roles_sid[i] as usize]);
                     }
                 }
             }
@@ -394,9 +388,9 @@ fn run() -> Result<(), Error> {
 
     // TODO: Would be nice not store all these strings in memory, but to flush them
     // from time to time to disk.
-    let stringtable = Rc::new(RefCell::new(StringTable::new()));
-    stringtable.borrow_mut().push("");
-    let mut tags = TagSerializer::new(&builder, stringtable.clone())?;
+    let mut stringtable = StringTable::new();
+    stringtable.push("");
+    let mut tags = TagSerializer::new(&builder)?;
     let infos = builder.start_infos()?; // TODO: Actually put some data in here
     let mut nodes_index = builder.start_nodes_index()?;
     info!("Initialized new osmflat archive at: {}", &args.arg_output);
@@ -428,7 +422,7 @@ fn run() -> Result<(), Error> {
     let mut index = pbf_header.ok_or_else(|| format_err!("missing header block"))?;
     let idx = index.next();
     let pbf_header: osmpbf::HeaderBlock = read_block(&mut file, &idx.unwrap())?;
-    serialize_header(&pbf_header, &builder, &mut *stringtable.borrow_mut())?;
+    serialize_header(&pbf_header, &builder, &mut stringtable)?;
     ensure!(
         index.next().is_none(),
         "found multiple header blocks, which is not supported."
@@ -454,7 +448,13 @@ fn run() -> Result<(), Error> {
         let mut nodes = builder.start_nodes()?;
         for idx in index {
             let block: osmpbf::PrimitiveBlock = read_block(&mut file, &idx)?;
-            stats += serialize_dense_nodes(&block, &mut nodes, &mut nodes_id_to_idx, &mut tags)?;
+            stats += serialize_dense_nodes(
+                &block,
+                &mut nodes,
+                &mut nodes_id_to_idx,
+                &mut stringtable,
+                &mut tags,
+            )?;
             pb.inc();
         }
         {
@@ -487,6 +487,7 @@ fn run() -> Result<(), Error> {
                 &nodes_id_to_idx,
                 &mut ways,
                 &mut ways_id_to_idx,
+                &mut stringtable,
                 &mut tags,
                 &mut nodes_index,
             )?;
@@ -531,10 +532,10 @@ fn run() -> Result<(), Error> {
                 &nodes_id_to_idx,
                 &ways_id_to_idx,
                 &relations_id_to_idx,
+                &mut stringtable,
                 &mut relations,
                 &mut relation_members,
                 &mut tags,
-                &stringtable,
             )?;
             pb.inc();
         }
@@ -553,9 +554,7 @@ fn run() -> Result<(), Error> {
     tags.close(); // drop the reference to stringtable
 
     info!("Writing stringtable to disk...");
-    let stringtable = Rc::try_unwrap(stringtable)
-        .unwrap_or_else(|_| panic!("logic error: stringtable is still in use in other place"));
-    builder.set_stringtable(&stringtable.into_inner().into_bytes())?;
+    builder.set_stringtable(&stringtable.into_bytes())?;
 
     infos.close()?;
     nodes_index.close()?;
