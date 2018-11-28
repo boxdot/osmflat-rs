@@ -1,28 +1,18 @@
-use docopt::Docopt;
+use std::path::PathBuf;
 
-const USAGE: &str = "
-Compiler of Open Street Data from osm.pbf format to osm.flatdata format.
-
-Usage:
-  osmflatc <input> <output> [-v...]
-  osmflatc (-h | --help)
-  osmflatc --version
-
-Options:
-  -v --verbose  Verbosity.
-  -h --help     Show this screen.
-  --version     Show version.
-";
-
-#[derive(Debug, Deserialize)]
+/// Compiler of Open Street Data from osm.pbf format to osm.flatdata format
+#[derive(Debug, StructOpt)]
+#[structopt(name = "osmflatc")]
 pub struct Args {
-    pub arg_input: String,
-    pub arg_output: String,
-    pub flag_verbose: usize,
-}
+    /// Verbose mode (-v, -vv, -vvv, etc.)
+    #[structopt(short = "v", long = "verbose", parse(from_occurrences))]
+    pub verbose: u8,
 
-pub fn parse_args() -> Args {
-    Docopt::new(USAGE)
-        .and_then(|d| d.deserialize())
-        .unwrap_or_else(|e| e.exit())
+    /// Input OSM pbf file
+    #[structopt(name = "input", parse(from_os_str))]
+    pub input: PathBuf,
+
+    /// Output directory for OSM flatdata archive
+    #[structopt(name = "output", parse(from_os_str))]
+    pub output: PathBuf,
 }

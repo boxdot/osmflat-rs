@@ -1,5 +1,4 @@
 use byteorder::{ByteOrder, NetworkEndian};
-use failure::Error;
 use flate2::read::ZlibDecoder;
 use prost::{self, Message};
 
@@ -29,7 +28,7 @@ impl BlockType {
     /// Note: We use public API of `prost` crate, which though is not exposed in
     /// the crate and marked with comment that it should be only used from
     /// `prost::Message`.
-    pub fn from_osmdata_blob(blob: &[u8]) -> Result<BlockType, io::Error> {
+    pub fn from_osmdata_blob(blob: &[u8]) -> io::Result<BlockType> {
         const PRIMITIVE_GROUP_TAG: u32 = 2;
         const NODES_TAG: u32 = 1;
         const DENSE_NODES_TAG: u32 = 2;
@@ -88,7 +87,7 @@ struct BlockIndexIterator {
 }
 
 impl BlockIndexIterator {
-    fn new<P: AsRef<Path>>(path: P) -> Result<Self, Error> {
+    fn new<P: AsRef<Path>>(path: P) -> io::Result<Self> {
         let file = File::open(path)?;
         Ok(Self {
             reader: BufReader::new(file),
@@ -99,7 +98,7 @@ impl BlockIndexIterator {
         })
     }
 
-    fn read_next(&mut self) -> Result<BlockIndex, io::Error> {
+    fn read_next(&mut self) -> io::Result<BlockIndex> {
         // read size of blob header
         self.cursor += 4;
         self.file_buf.resize(4, 0);
@@ -159,7 +158,7 @@ impl BlockIndexIterator {
 }
 
 impl Iterator for BlockIndexIterator {
-    type Item = Result<BlockIndex, io::Error>;
+    type Item = io::Result<BlockIndex>;
     fn next(&mut self) -> Option<Self::Item> {
         if self.is_open {
             let next = self.read_next();
@@ -182,7 +181,7 @@ impl Iterator for BlockIndexIterator {
 pub fn read_block<F: Read + Seek, T: prost::Message + Default>(
     reader: &mut F,
     idx: &BlockIndex,
-) -> Result<T, Error> {
+) -> Result<T, io::Error> {
     reader.seek(io::SeekFrom::Start(idx.blob_start as u64))?;
 
     // TODO: allocate buffers outside of the function
@@ -202,7 +201,10 @@ pub fn read_block<F: Read + Seek, T: prost::Message + Default>(
         decoder.read_to_end(&mut blob_buf)?;
         &blob_buf
     } else {
-        return Err(format_err!("invalid input data: unknown compression"));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "unknown compression",
+        ));
     };
     Ok(T::decode(blob_data)?)
 }
@@ -211,7 +213,7 @@ pub fn read_block<F: Read + Seek, T: prost::Message + Default>(
 ///
 /// The index is sorted lexicographically by block type and position in the pbf
 /// file.
-pub fn build_block_index<P: AsRef<Path>>(path: P) -> Result<Vec<BlockIndex>, Error> {
+pub fn build_block_index<P: AsRef<Path>>(path: P) -> io::Result<Vec<BlockIndex>> {
     let mut index: Vec<_> = BlockIndexIterator::new(path)?
         .filter_map(|block| match block {
             Ok(b) => Some(b),
