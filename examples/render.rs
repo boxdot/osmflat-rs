@@ -154,7 +154,7 @@ impl<'a> Iterator for NodesIterator<'a> {
     }
 }
 
-fn substring(strings: &str, start: u32) -> &str {
+fn substring(strings: &str, start: u64) -> &str {
     let start = start as usize;
     let end = strings[start..].find('\0').expect("invalid string");
     &strings[start..start + end]

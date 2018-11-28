@@ -2,9 +2,9 @@ use std::collections::{hash_map, HashMap};
 
 #[derive(Debug, Default)]
 pub struct StringTable {
-    indexed_data: HashMap<String, u32>,
-    contiguous_data: Vec<(String, u32)>,
-    size_in_bytes: u32,
+    indexed_data: HashMap<String, u64>,
+    contiguous_data: Vec<(String, u64)>,
+    size_in_bytes: u64,
 }
 
 impl StringTable {
@@ -12,7 +12,7 @@ impl StringTable {
         Default::default()
     }
 
-    pub fn next_index(&self) -> u32 {
+    pub fn next_index(&self) -> u64 {
         self.size_in_bytes
     }
 
@@ -20,7 +20,7 @@ impl StringTable {
     ///
     /// If the string was already inserted before, the string is deduplicated
     /// and the index to the previous string is returned.
-    pub fn insert<S: Into<String>>(&mut self, s: S) -> u32 {
+    pub fn insert<S: Into<String>>(&mut self, s: S) -> u64 {
         // Horrible news, we need to clone s, even we would not need to:
         // https://github.com/rust-lang/rust/pull/50821
         let s = s.into();
@@ -29,7 +29,7 @@ impl StringTable {
             hash_map::Entry::Occupied(entry) => *entry.into_mut(),
             hash_map::Entry::Vacant(entry) => {
                 let idx = *entry.insert(self.size_in_bytes);
-                self.size_in_bytes = self.size_in_bytes + s_len as u32 + 1;
+                self.size_in_bytes = self.size_in_bytes + s_len as u64 + 1;
                 idx
             }
         }
@@ -40,13 +40,13 @@ impl StringTable {
     /// The string is always pushed into the string table regardless of it was
     /// already inserted or not. Use this method for creating contiguous
     /// sequences of strings.
-    pub fn push<S: Into<String>>(&mut self, s: S) -> u32 {
+    pub fn push<S: Into<String>>(&mut self, s: S) -> u64 {
         let idx = self.size_in_bytes;
         let s: String = s.into();
-        self.size_in_bytes += s.len() as u32 + 1;
+        self.size_in_bytes += s.len() as u64 + 1;
         self.indexed_data.entry(s.clone()).or_insert(idx);
         self.contiguous_data.push((s, idx));
-        idx as u32
+        idx as u64
     }
 
     pub fn into_bytes(self) -> Vec<u8> {
@@ -57,7 +57,7 @@ impl StringTable {
             ..
         } = self;
 
-        let mut index: Vec<(&String, &u32)> = indexed_data.iter().collect();
+        let mut index: Vec<(&String, &u64)> = indexed_data.iter().collect();
         index.reserve(contiguous_data.len());
         for (s, idx) in &contiguous_data {
             index.push((s, idx));
@@ -102,7 +102,7 @@ mod test {
             let mut st = StringTable::new();
             let mut index = 0;
             for elt in v {
-                assert_eq!(st.push(elt.clone()), index as u32);
+                assert_eq!(st.push(elt.clone()), index as u64);
                 index += elt.len() + 1;
             }
             let bytes = st.into_bytes();
