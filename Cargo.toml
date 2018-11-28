@@ -24,6 +24,7 @@ prost-derive = "0.3"
 prost-types = "0.3"
 stderrlog = "0.4"
 structopt = "0.2"
+rayon = "1.0.3"
 
 [build-dependencies]
 prost-build = "0.3"

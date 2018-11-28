@@ -16,6 +16,7 @@ extern crate pbr;
 #[cfg(test)]
 #[macro_use]
 extern crate proptest;
+extern crate rayon;
 extern crate stderrlog;
 #[macro_use]
 extern crate structopt;
