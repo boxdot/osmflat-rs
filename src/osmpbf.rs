@@ -6,6 +6,8 @@ use std::fs::File;
 use std::io::{self, BufReader, Cursor, ErrorKind, Read, Seek, SeekFrom};
 use std::path::Path;
 
+use std::sync::Mutex;
+
 include!(concat!(env!("OUT_DIR"), "/osmpbf.rs"));
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -82,8 +84,12 @@ struct BlockIndexIterator {
     reader: BufReader<File>,
     cursor: usize,
     file_buf: Vec<u8>,
-    blob_buf: Vec<u8>,
     is_open: bool,
+}
+
+enum BlobInfo {
+    Header(BlockIndex),
+    Unknown(usize, usize, Vec<u8>),
 }
 
 impl BlockIndexIterator {
@@ -93,12 +99,11 @@ impl BlockIndexIterator {
             reader: BufReader::new(file),
             cursor: 0,
             file_buf: Vec::new(),
-            blob_buf: Vec::new(),
             is_open: true,
         })
     }
 
-    fn read_next(&mut self) -> io::Result<BlockIndex> {
+    fn next_blob(&mut self) -> Result<BlobInfo, io::Error> {
         // read size of blob header
         self.cursor += 4;
         self.file_buf.resize(4, 0);
@@ -117,40 +122,17 @@ impl BlockIndexIterator {
 
         if blob_header.type_ == "OSMHeader" {
             self.reader.seek(SeekFrom::Current(blob_len as i64))?;
-            Ok(BlockIndex {
+            Ok(BlobInfo::Header(BlockIndex {
                 block_type: BlockType::Header,
                 blob_start,
                 blob_len,
-            })
+            }))
         } else if blob_header.type_ == "OSMData" {
             // read blob
-            self.file_buf.resize(blob_header.datasize as usize, 0);
-            self.reader.read_exact(&mut self.file_buf)?;
-            let blob = Blob::decode(&self.file_buf)?;
-
-            let blob_data = if blob.raw.is_some() {
-                // use raw bytes
-                blob.raw.as_ref().unwrap()
-            } else if blob.zlib_data.is_some() {
-                // decompress zlib data
-                self.blob_buf.clear();
-                let data: &Vec<u8> = blob.zlib_data.as_ref().unwrap();
-                let mut decoder = ZlibDecoder::new(&data[..]);
-                decoder.read_to_end(&mut self.blob_buf)?;
-                &self.blob_buf
-            } else {
-                panic!("can only read raw or zlib compressed blob");
-            };
-            assert_eq!(
-                blob_data.len(),
-                blob.raw_size.unwrap_or_else(|| blob_data.len() as i32) as usize
-            );
-
-            Ok(BlockIndex {
-                block_type: BlockType::from_osmdata_blob(&blob_data[..])?,
-                blob_start,
-                blob_len,
-            })
+            let mut result = Vec::new();
+            result.resize(blob_header.datasize as usize, 0);
+            self.reader.read_exact(&mut result)?;
+            Ok(BlobInfo::Unknown(blob_start, blob_len, result))
         } else {
             panic!("unknown blob type");
         }
@@ -158,10 +140,10 @@ impl BlockIndexIterator {
 }
 
 impl Iterator for BlockIndexIterator {
-    type Item = io::Result<BlockIndex>;
+    type Item = Result<BlobInfo, io::Error>;
     fn next(&mut self) -> Option<Self::Item> {
         if self.is_open {
-            let next = self.read_next();
+            let next = self.next_blob();
             if let Err(e) = next {
                 if e.kind() == ErrorKind::UnexpectedEof {
                     self.is_open = false;
@@ -209,20 +191,62 @@ pub fn read_block<F: Read + Seek, T: prost::Message + Default>(
     Ok(T::decode(blob_data)?)
 }
 
-/// Reads the pbf file at the given path and builds an index of block types.
-///
-/// The index is sorted lexicographically by block type and position in the pbf
-/// file.
-pub fn build_block_index<P: AsRef<Path>>(path: P) -> io::Result<Vec<BlockIndex>> {
-    let mut index: Vec<_> = BlockIndexIterator::new(path)?
-        .filter_map(|block| match block {
-            Ok(b) => Some(b),
-            Err(e) => {
-                eprintln!("Skipping block due to error: {}", e);
-                None
-            }
-        })
-        .collect();
-    index.sort();
-    Ok(index)
+fn blob_type_from_blob_info(
+    blob_start: usize,
+    blob_len: usize,
+    blob: Vec<u8>,
+) -> Result<BlockIndex, io::Error> {
+    let blob = Blob::decode(&blob)?;
+    let mut blob_buf = Vec::new();
+
+    let blob_data = if blob.raw.is_some() {
+        // use raw bytes
+        blob.raw.as_ref().unwrap()
+    } else if blob.zlib_data.is_some() {
+        // decompress zlib data
+        let data: &Vec<u8> = blob.zlib_data.as_ref().unwrap();
+        let mut decoder = ZlibDecoder::new(&data[..]);
+        decoder.read_to_end(&mut blob_buf)?;
+        &blob_buf
+    } else {
+        panic!("can only read raw or zlib compressed blob");
+    };
+    assert_eq!(
+        blob_data.len(),
+        blob.raw_size.unwrap_or_else(|| blob_data.len() as i32) as usize
+    );
+
+    Ok(BlockIndex {
+        block_type: BlockType::from_osmdata_blob(&blob_data[..])?,
+        blob_start,
+        blob_len,
+    })
+}
+
+    let iter = Mutex::new(BlockIndexIterator::new(path)?);
+    let result = Mutex::new(Vec::new());
+    rayon::scope(|s| {
+        for _ in 1..*rayon::current_num_threads() {
+            s.spawn(|_| {
+                info!("Started processing thread");
+                loop {
+                    let blob = iter.lock().unwrap().next();
+                    let block = match blob {
+                        Some(Ok(BlobInfo::Unknown(start, len, blob))) => {
+                            blob_type_from_blob_info(start, len, blob)
+                        }
+                        Some(Ok(BlobInfo::Header(b))) => Ok(b),
+                        Some(Err(e)) => Err(e),
+                        None => break,
+                    };
+                    match block {
+                        Ok(b) => result.lock().unwrap().push(b),
+                        Err(e) => eprintln!("Skipping block due to error: {}", e),
+                    }
+                }
+            });
+        }
+    });
+
+    Ok(result.into_inner().unwrap())
 }
