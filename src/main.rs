@@ -268,7 +268,6 @@ fn build_relations_index<'a, F: Read + Seek, I: 'a + Iterator<Item = &'a BlockIn
     block_index: I,
 ) -> Result<ids::IdTable, Error> {
     let mut result = ids::IdTableBuilder::new();
-    result.skip(1); // Id 0 is reserved elsewhere
     for block_idx in block_index {
         let block: osmpbf::PrimitiveBlock = read_block(reader, &block_idx)?;
         for group in &block.primitivegroup {
@@ -389,7 +388,6 @@ fn run() -> Result<(), Error> {
     // TODO: Would be nice not store all these strings in memory, but to flush them
     // from time to time to disk.
     let mut stringtable = StringTable::new();
-    stringtable.push("");
     let mut tags = TagSerializer::new(&builder)?;
     let infos = builder.start_infos()?; // TODO: Actually put some data in here
     let mut nodes_index = builder.start_nodes_index()?;
@@ -480,9 +478,6 @@ fn run() -> Result<(), Error> {
         pb.message("Converting ways...");
 
         let mut ways = builder.start_ways()?;
-        ways.grow()?; // index 0 is reserved for invalid way
-        ways_id_to_idx.skip(1);
-
         for idx in index {
             let block: osmpbf::PrimitiveBlock = read_block(&mut file, &idx)?;
             stats += serialize_ways(
@@ -523,10 +518,7 @@ fn run() -> Result<(), Error> {
         pb.message("Converting relations...");
 
         let mut relations = builder.start_relations()?;
-        relations.grow()?; // index 0 is reserved for invalid relation
-
         let mut relation_members = builder.start_relation_members()?;
-        relation_members.grow()?; // index 0 is ALSO reserved for invalid relation
 
         for idx in index {
             let block: osmpbf::PrimitiveBlock = read_block(&mut file, &idx)?;
