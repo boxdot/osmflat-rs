@@ -492,7 +492,7 @@ archive Osm
     }
 }
 
-// Max 40 bits values used to indicate null references
+// Max 40 bits value used to indicate null references
 pub const INVALID_IDX: u64 = 1099511627775;
 
 define_struct!(

@@ -14,7 +14,7 @@ pub struct IdTableBuilder {
     next_id: u64,
 }
 
-// pack index compactly in 9 bytes: supports 1 trillion indices
+// pack index compactly in 8 bytes: supports 1 trillion indices
 fn pack_index(x: (u32, u64)) -> u64 {
     assert!(x.0 < (1_u32 << 24));
     assert!(x.1 < (1_u64 << 40));

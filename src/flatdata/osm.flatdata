@@ -1,6 +1,6 @@
 namespace osm {
 
-// Max 40 bits values used to indicate null references
+// Max 40 bits value used to indicate null references
 const u64 INVALID_IDX = 0xFFFFFFFFFF;
 
 struct Header {
