@@ -32,6 +32,8 @@ prost-build = "0.3"
 proptest = "0.6.0"
 png = "0.12"
 bresenham = "0.1"
+svg = "0.5"
+haversine = "0.2"
 
 [[bin]]
 name = "osmflatc"
