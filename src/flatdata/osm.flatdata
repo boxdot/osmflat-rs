@@ -85,7 +85,6 @@ struct Relation {
     info_idx: u32 : 32;
 }
 
-@bound_implicitly(Ways: ways, nodes_index)
 @bound_implicitly(Relations: relations, relation_members)
 archive Osm {
     @explicit_reference( Header.required_feature_first_idx, stringtable )
@@ -123,14 +122,10 @@ archive Osm {
     @explicit_reference( Info.user_idx, stringtable )
     infos: vector<Info>;
 
-    /**
-     * Index aligned with nodes + ways + relations to index ranges of tags.
-     */
+    @explicit_reference( TagIndex.value, tags )
     tags_index: vector<TagIndex>;
 
-    /**
-     * Index aligned with ways to index ranges of nodes.
-     */
+    @explicit_reference( NodeIndex.value, nodes )
     nodes_index: vector<NodeIndex>;
 
     /**

@@ -234,7 +234,6 @@ const u32 INVALID_IDX = 0;
 }
 
 namespace osm {
-@bound_implicitly( Ways : .osm.Osm.ways, .osm.Osm.nodes_index )
 @bound_implicitly( Relations : .osm.Osm.relations, .osm.Osm.relation_members )
 archive Osm
 {
@@ -266,7 +265,9 @@ archive Osm
     tags : vector< .osm.Tag >;
     @explicit_reference( .osm.Info.user_idx, .osm.Osm.stringtable )
     infos : vector< .osm.Info >;
+    @explicit_reference( .osm.TagIndex.value, .osm.Osm.tags )
     tags_index : vector< .osm.TagIndex >;
+    @explicit_reference( .osm.NodeIndex.value, .osm.Osm.nodes )
     nodes_index : vector< .osm.NodeIndex >;
     stringtable : raw_data;
 }
@@ -457,6 +458,7 @@ struct TagIndex
 namespace osm {
 archive Osm
 {
+    @explicit_reference( .osm.TagIndex.value, .osm.Osm.tags )
     tags_index : vector< .osm.TagIndex >;
 }
 }
@@ -472,6 +474,7 @@ struct NodeIndex
 namespace osm {
 archive Osm
 {
+    @explicit_reference( .osm.NodeIndex.value, .osm.Osm.nodes )
     nodes_index : vector< .osm.NodeIndex >;
 }
 }

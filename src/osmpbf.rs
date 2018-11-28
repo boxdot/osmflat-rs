@@ -28,7 +28,7 @@ impl BlockType {
     /// Note: We use public API of `prost` crate, which though is not exposed in
     /// the crate and marked with comment that it should be only used from
     /// `prost::Message`.
-    pub fn from_osmdata_blob(blob: &[u8]) -> Result<BlockType, io::Error> {
+    pub fn from_osmdata_blob(blob: &[u8]) -> io::Result<BlockType> {
         const PRIMITIVE_GROUP_TAG: u32 = 2;
         const NODES_TAG: u32 = 1;
         const DENSE_NODES_TAG: u32 = 2;
@@ -87,7 +87,7 @@ struct BlockIndexIterator {
 }
 
 impl BlockIndexIterator {
-    fn new<P: AsRef<Path>>(path: P) -> Result<Self, io::Error> {
+    fn new<P: AsRef<Path>>(path: P) -> io::Result<Self> {
         let file = File::open(path)?;
         Ok(Self {
             reader: BufReader::new(file),
@@ -98,7 +98,7 @@ impl BlockIndexIterator {
         })
     }
 
-    fn read_next(&mut self) -> Result<BlockIndex, io::Error> {
+    fn read_next(&mut self) -> io::Result<BlockIndex> {
         // read size of blob header
         self.cursor += 4;
         self.file_buf.resize(4, 0);
@@ -158,7 +158,7 @@ impl BlockIndexIterator {
 }
 
 impl Iterator for BlockIndexIterator {
-    type Item = Result<BlockIndex, io::Error>;
+    type Item = io::Result<BlockIndex>;
     fn next(&mut self) -> Option<Self::Item> {
         if self.is_open {
             let next = self.read_next();
@@ -213,7 +213,7 @@ pub fn read_block<F: Read + Seek, T: prost::Message + Default>(
 ///
 /// The index is sorted lexicographically by block type and position in the pbf
 /// file.
-pub fn build_block_index<P: AsRef<Path>>(path: P) -> Result<Vec<BlockIndex>, io::Error> {
+pub fn build_block_index<P: AsRef<Path>>(path: P) -> io::Result<Vec<BlockIndex>> {
     let mut index: Vec<_> = BlockIndexIterator::new(path)?
         .filter_map(|block| match block {
             Ok(b) => Some(b),
