@@ -32,18 +32,18 @@ mod strings;
 
 use osmpbf::{build_block_index, read_block, BlockIndex, BlockType};
 use stats::Stats;
+use std::path::PathBuf;
 use strings::StringTable;
 
 use colored::*;
 use failure::Error;
 use flatdata::{ArchiveBuilder, FileResourceStorage};
 use itertools::Itertools;
-use pbr::ProgressBar;
 use structopt::StructOpt;
 
 use std::collections::{hash_map, HashMap};
 use std::fs::File;
-use std::io::{self, Read, Seek};
+use std::io;
 use std::str;
 
 fn serialize_header(
@@ -265,20 +265,27 @@ fn serialize_ways(
     Ok(stats)
 }
 
-fn build_relations_index<'a, F: Read + Seek, I: 'a + Iterator<Item = &'a BlockIndex>>(
-    reader: &mut F,
+fn build_relations_index<I: ExactSizeIterator<Item = BlockIndex> + Send + 'static>(
+    path: &PathBuf,
     block_index: I,
 ) -> Result<ids::IdTable, Error> {
     let mut result = ids::IdTableBuilder::new();
     result.skip(1); // Id 0 is reserved elsewhere
-    for block_idx in block_index {
-        let block: osmpbf::PrimitiveBlock = read_block(reader, &block_idx)?;
-        for group in &block.primitivegroup {
-            for relation in &group.relations {
-                result.insert(relation.id as u64);
+    parallel::parallel_process(
+        "Building relations index...",
+        block_index,
+        || -> Result<File, Error> { Ok(File::open(&path)?) },
+        |mut file, idx| read_block(&mut file, &idx),
+        |data: Result<osmpbf::PrimitiveBlock, io::Error>| -> Result<(), Error> {
+            for group in &data?.primitivegroup {
+                for relation in &group.relations {
+                    result.insert(relation.id as u64);
+                }
             }
-        }
-    }
+            Ok(())
+        },
+    )?;
+
     Ok(result.build())
 }
 
@@ -477,35 +484,35 @@ fn run() -> Result<(), Error> {
     // Serialize ways
     let mut ways_id_to_idx = ids::IdTableBuilder::new();
     if let Some(index) = pbf_ways {
-        let index: Vec<_> = index.collect();
-
-        let mut pb = ProgressBar::new(index.len() as u64);
-        pb.message("Converting ways...");
-
         let mut ways = builder.start_ways()?;
         ways.grow()?; // index 0 is reserved for invalid way
         ways_id_to_idx.skip(1);
+        let index: Vec<_> = index.collect();
+        parallel::parallel_process(
+            "Converting ways...",
+            index.into_iter(),
+            || -> Result<File, Error> { Ok(File::open(&args.input)?) },
+            |mut file, idx| read_block(&mut file, &idx),
+            |data| -> Result<(), Error> {
+                stats += serialize_ways(
+                    &data?,
+                    &nodes_id_to_idx,
+                    &mut ways,
+                    &mut ways_id_to_idx,
+                    &mut stringtable,
+                    &mut tags,
+                    &mut nodes_index,
+                )?;
+                Ok(())
+            },
+        )?;
 
-        for idx in index {
-            let block: osmpbf::PrimitiveBlock = read_block(&mut file, &idx)?;
-            stats += serialize_ways(
-                &block,
-                &nodes_id_to_idx,
-                &mut ways,
-                &mut ways_id_to_idx,
-                &mut stringtable,
-                &mut tags,
-                &mut nodes_index,
-            )?;
-            pb.inc();
-        }
         {
             let mut sentinel = ways.grow()?;
             sentinel.set_tag_first_idx(tags.next_index());
             sentinel.set_ref_first_idx(nodes_index.len() as u64);
         }
         ways.close()?;
-        pb.finish();
     };
     info!("Ways converted.");
     let ways_id_to_idx = ways_id_to_idx.build();
@@ -515,15 +522,9 @@ fn run() -> Result<(), Error> {
     if let Some(index) = pbf_relations {
         let index: Vec<_> = index.collect();
 
-        info!("Building relations index...");
-
         // We need to build the index of relation ids first, since relations can refer
         // again to relations.
-        let relations_id_to_idx = build_relations_index(&mut file, index.iter())?;
-        info!("Relations index built.");
-
-        let mut pb = ProgressBar::new(index.len() as u64);
-        pb.message("Converting relations...");
+        let relations_id_to_idx = build_relations_index(&args.input, index.clone().into_iter())?;
 
         let mut relations = builder.start_relations()?;
         relations.grow()?; // index 0 is reserved for invalid relation
@@ -531,20 +532,26 @@ fn run() -> Result<(), Error> {
         let mut relation_members = builder.start_relation_members()?;
         relation_members.grow()?; // index 0 is ALSO reserved for invalid relation
 
-        for idx in index {
-            let block: osmpbf::PrimitiveBlock = read_block(&mut file, &idx)?;
-            stats += serialize_relations(
-                &block,
-                &nodes_id_to_idx,
-                &ways_id_to_idx,
-                &relations_id_to_idx,
-                &mut stringtable,
-                &mut relations,
-                &mut relation_members,
-                &mut tags,
-            )?;
-            pb.inc();
-        }
+        parallel::parallel_process(
+            "Converting relations...",
+            index.into_iter(),
+            || -> Result<File, Error> { Ok(File::open(&args.input)?) },
+            |mut file, idx| read_block(&mut file, &idx),
+            |data| -> Result<(), Error> {
+                stats += serialize_relations(
+                    &data?,
+                    &nodes_id_to_idx,
+                    &ways_id_to_idx,
+                    &relations_id_to_idx,
+                    &mut stringtable,
+                    &mut relations,
+                    &mut relation_members,
+                    &mut tags,
+                )?;
+                Ok(())
+            },
+        )?;
+
         {
             let mut sentinel = relations.grow()?;
             sentinel.set_tag_first_idx(tags.next_index());
@@ -552,7 +559,6 @@ fn run() -> Result<(), Error> {
 
         relations.close()?;
         relation_members.close()?;
-        pb.finish();
     };
     info!("Relations converted.");
 

@@ -1,3 +1,5 @@
+use rayon::prelude::*;
+
 /// Maps u64 integers to a consecutive range of ids
 #[derive(Debug)]
 pub struct IdTable {
@@ -48,9 +50,7 @@ impl IdTableBuilder {
     }
 
     pub fn build(mut self) -> IdTable {
-        for mut set in &mut self.data {
-            set.sort();
-        }
+        self.data.par_iter_mut().for_each(|x| x.par_sort_unstable());
 
         IdTable {
             data: self.data,

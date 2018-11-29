@@ -40,6 +40,7 @@ pub fn parallel_process<Item, Context: Send + 'static, Data: Send + 'static, Err
             next.1.notify_all();
         });
     }
+    drop(sender); // drop to make sure iteration will finish once all senders are out of scope
     for result in receiver {
         consume(result)?;
         pb.inc();

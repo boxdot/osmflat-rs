@@ -75,7 +75,7 @@ impl BlockType {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
 pub struct BlockIndex {
     pub block_type: BlockType,
     pub blob_start: usize,
