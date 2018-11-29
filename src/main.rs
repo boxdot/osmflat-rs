@@ -20,7 +20,6 @@ extern crate rayon;
 extern crate stderrlog;
 #[macro_use]
 extern crate structopt;
-extern crate futures;
 
 mod args;
 mod ids;
