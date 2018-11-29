@@ -229,7 +229,7 @@ fn blob_type_from_blob_info(
 pub fn build_block_index<P: AsRef<Path>>(path: P) -> io::Result<Vec<BlockIndex>> {
     let iter = Mutex::new(BlockIndexIterator::new(path)?);
     let result = Mutex::new(Vec::new());
-    let num_tasks = 2 * rayon::current_num_threads();
+    let num_tasks = rayon::current_num_threads();
     info!(
         "Building block index with {} parallel task(s)...",
         num_tasks
