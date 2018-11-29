@@ -8,6 +8,8 @@ use std::path::Path;
 
 use std::sync::Mutex;
 
+use rayon::prelude::*;
+
 include!(concat!(env!("OUT_DIR"), "/osmpbf.rs"));
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -192,12 +194,12 @@ pub fn read_block<F: Read + Seek, T: prost::Message + Default>(
 }
 
 fn blob_type_from_blob_info(
+    blob_buf: &mut Vec<u8>,
     blob_start: usize,
     blob_len: usize,
     blob: Vec<u8>,
 ) -> Result<BlockIndex, io::Error> {
     let blob = Blob::decode(&blob)?;
-    let mut blob_buf = Vec::new();
 
     let blob_data = if blob.raw.is_some() {
         // use raw bytes
@@ -206,7 +208,8 @@ fn blob_type_from_blob_info(
         // decompress zlib data
         let data: &Vec<u8> = blob.zlib_data.as_ref().unwrap();
         let mut decoder = ZlibDecoder::new(&data[..]);
-        decoder.read_to_end(&mut blob_buf)?;
+        blob_buf.clear();
+        decoder.read_to_end(blob_buf)?;
         &blob_buf
     } else {
         panic!("can only read raw or zlib compressed blob");
@@ -233,23 +236,31 @@ pub fn build_block_index<P: AsRef<Path>>(path: P) -> io::Result<Vec<BlockIndex>>
     );
     rayon::scope(|s| {
         for _ in 1..num_tasks {
-            s.spawn(|_| loop {
-                let blob = iter.lock().unwrap().next();
-                let block = match blob {
-                    Some(Ok(BlobInfo::Unknown(start, len, blob))) => {
-                        blob_type_from_blob_info(start, len, blob)
+            s.spawn(|_| {
+                let mut local_result = Vec::new();
+                let mut blob_buf = Vec::new();
+                loop {
+                    let blob = iter.lock().unwrap().next();
+                    let block = match blob {
+                        Some(Ok(BlobInfo::Unknown(start, len, blob))) => {
+                            blob_type_from_blob_info(&mut blob_buf, start, len, blob)
+                        }
+                        Some(Ok(BlobInfo::Header(b))) => Ok(b),
+                        Some(Err(e)) => Err(e),
+                        None => break,
+                    };
+                    match block {
+                        Ok(b) => local_result.push(b),
+                        Err(e) => eprintln!("Skipping block due to error: {}", e),
                     }
-                    Some(Ok(BlobInfo::Header(b))) => Ok(b),
-                    Some(Err(e)) => Err(e),
-                    None => break,
-                };
-                match block {
-                    Ok(b) => result.lock().unwrap().push(b),
-                    Err(e) => eprintln!("Skipping block due to error: {}", e),
                 }
+                result.lock().unwrap().extend(local_result);
             });
         }
     });
 
-    Ok(result.into_inner().unwrap())
+    let mut result = result.into_inner().unwrap();
+    result.par_sort_unstable();
+    info!("Found {} blocks", result.len());
+    Ok(result)
 }

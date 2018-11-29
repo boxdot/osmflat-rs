@@ -43,6 +43,7 @@ use std::collections::{hash_map, HashMap};
 use std::fs::File;
 use std::io::{self, Read, Seek};
 use std::str;
+use std::sync::{mpsc::sync_channel, Arc, Condvar, Mutex};
 
 fn serialize_header(
     header_block: &osmpbf::HeaderBlock,
@@ -419,7 +420,7 @@ fn run() -> Result<(), Error> {
     }
     info!("PBF block index built.");
 
-    let mut file = File::open(args.input)?;
+    let mut file = File::open(&args.input)?;
 
     // Serialize header
     let mut index = pbf_header.ok_or_else(|| format_err!("missing header block"))?;
@@ -445,14 +446,42 @@ fn run() -> Result<(), Error> {
     let mut nodes_id_to_idx = ids::IdTableBuilder::new();
     if let Some(index) = pbf_dense_nodes {
         let index: Vec<_> = index.collect();
+        let index_len = index.len();
 
-        let mut pb = ProgressBar::new(index.len() as u64);
+        let mut pb = ProgressBar::new(index_len as u64);
         pb.message("Converting dense nodes...");
         let mut nodes = builder.start_nodes()?;
-        for idx in index {
-            let block: osmpbf::PrimitiveBlock = read_block(&mut file, &idx)?;
+        let iter = Arc::new(Mutex::new(index.into_iter().enumerate()));
+        let next = Arc::new((Mutex::new(0_usize), Condvar::new()));
+        let (sender, receiver) = sync_channel(rayon::current_num_threads());
+        for _ in 1..rayon::current_num_threads() {
+            let mut local_file = File::open(&args.input)?;
+            let iter = iter.clone();
+            let next = next.clone();
+            let sender = sender.clone();
+            rayon::spawn(move || loop {
+                let idx = iter.lock().unwrap().next();
+                let idx = match idx {
+                    Some(x) => x,
+                    None => break,
+                };
+
+                let block: io::Result<osmpbf::PrimitiveBlock> = read_block(&mut local_file, &idx.1);
+
+                let mut guard = next.0.lock().unwrap();
+                while *guard != idx.0 {
+                    guard = next.1.wait(guard).unwrap();
+                }
+                sender.send((idx.0, block)).unwrap();
+                *guard += 1;
+                next.1.notify_all();
+            });
+        }
+        for idx in 0..index_len {
+            let block = receiver.recv().unwrap();
+            assert_eq!(idx, block.0);
             stats += serialize_dense_nodes(
-                &block,
+                &block.1?,
                 &mut nodes,
                 &mut nodes_id_to_idx,
                 &mut stringtable,
