@@ -40,3 +40,6 @@ path = "src/main.rs"
 
 [[example]]
 name = "render"
+
+[[example]]
+name = "rendering-scaffold"
