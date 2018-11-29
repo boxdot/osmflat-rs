@@ -247,15 +247,11 @@ fn serialize_ways(
             let mut node_ref = 0;
             for delta in &pbf_way.refs {
                 node_ref += delta;
-                let mut node_idx = nodes_index.grow()?;
-                let idx = match nodes_id_to_idx.get(node_ref as u64) {
-                    Some(idx) => idx,
-                    None => {
-                        stats.num_unresolved_node_ids += 1;
-                        osmflat::INVALID_IDX
-                    }
-                };
-                node_idx.set_value(idx);
+                let idx = nodes_id_to_idx.get(node_ref as u64).unwrap_or_else(|| {
+                    stats.num_unresolved_node_ids += 1;
+                    osmflat::INVALID_IDX
+                });
+                nodes_index.grow()?.set_value(idx);
             }
         }
         stats.num_ways += group.ways.len();
@@ -268,7 +264,6 @@ fn build_relations_index<'a, F: Read + Seek, I: 'a + Iterator<Item = &'a BlockIn
     block_index: I,
 ) -> Result<ids::IdTable, Error> {
     let mut result = ids::IdTableBuilder::new();
-    result.skip(1); // Id 0 is reserved elsewhere
     for block_idx in block_index {
         let block: osmpbf::PrimitiveBlock = read_block(reader, &block_idx)?;
         for group in &block.primitivegroup {
@@ -328,39 +323,30 @@ fn serialize_relations(
 
                 match member_type.unwrap() {
                     osmpbf::relation::MemberType::Node => {
-                        let idx = match nodes_id_to_idx.get(memid as u64) {
-                            Some(idx) => idx,
-                            None => {
-                                stats.num_unresolved_node_ids += 1;
-                                osmflat::INVALID_IDX
-                            }
-                        };
+                        let idx = nodes_id_to_idx.get(memid as u64).unwrap_or_else(|| {
+                            stats.num_unresolved_node_ids += 1;
+                            osmflat::INVALID_IDX
+                        });
 
                         let mut member = members.add_node_member();
                         member.set_node_idx(idx);
                         member.set_role_idx(string_refs[pbf_relation.roles_sid[i] as usize]);
                     }
                     osmpbf::relation::MemberType::Way => {
-                        let idx = match ways_id_to_idx.get(memid as u64) {
-                            Some(idx) => idx,
-                            None => {
-                                stats.num_unresolved_way_ids += 1;
-                                osmflat::INVALID_IDX
-                            }
-                        };
+                        let idx = ways_id_to_idx.get(memid as u64).unwrap_or_else(|| {
+                            stats.num_unresolved_way_ids += 1;
+                            osmflat::INVALID_IDX
+                        });
 
                         let mut member = members.add_way_member();
                         member.set_way_idx(idx);
                         member.set_role_idx(string_refs[pbf_relation.roles_sid[i] as usize]);
                     }
                     osmpbf::relation::MemberType::Relation => {
-                        let idx = match relations_id_to_idx.get(memid as u64) {
-                            Some(idx) => idx,
-                            None => {
-                                stats.num_unresolved_rel_ids += 1;
-                                osmflat::INVALID_IDX
-                            }
-                        };
+                        let idx = relations_id_to_idx.get(memid as u64).unwrap_or_else(|| {
+                            stats.num_unresolved_rel_ids += 1;
+                            osmflat::INVALID_IDX
+                        });
 
                         let mut member = members.add_relation_member();
                         member.set_relation_idx(idx);
@@ -389,7 +375,6 @@ fn run() -> Result<(), Error> {
     // TODO: Would be nice not store all these strings in memory, but to flush them
     // from time to time to disk.
     let mut stringtable = StringTable::new();
-    stringtable.push("");
     let mut tags = TagSerializer::new(&builder)?;
     let infos = builder.start_infos()?; // TODO: Actually put some data in here
     let mut nodes_index = builder.start_nodes_index()?;
@@ -404,14 +389,13 @@ fn run() -> Result<(), Error> {
     // TODO: move out into a function
     let groups = block_index.into_iter().group_by(|b| b.block_type);
     let mut pbf_header = None;
-    let mut pbf_nodes = None;
     let mut pbf_dense_nodes = None;
     let mut pbf_ways = None;
     let mut pbf_relations = None;
     for (block_type, blocks) in &groups {
         match block_type {
             BlockType::Header => pbf_header = Some(blocks),
-            BlockType::Nodes => pbf_nodes = Some(blocks),
+            BlockType::Nodes => panic!("Found nodes block, only dense nodes are supported now"),
             BlockType::DenseNodes => pbf_dense_nodes = Some(blocks),
             BlockType::Ways => pbf_ways = Some(blocks),
             BlockType::Relations => pbf_relations = Some(blocks),
@@ -431,13 +415,6 @@ fn run() -> Result<(), Error> {
         "found multiple header blocks, which is not supported."
     );
     info!("Header written.");
-
-    // Serialize nodes
-    // TODO: Implement!
-    ensure!(
-        pbf_nodes.is_none(),
-        format_err!("found nodes, only dense nodes are supported now")
-    );
 
     let mut stats = Stats::default();
 
@@ -460,10 +437,9 @@ fn run() -> Result<(), Error> {
             )?;
             pb.inc();
         }
-        {
-            let mut sentinel = nodes.grow()?;
-            sentinel.set_tag_first_idx(tags.next_index());
-        }
+        // fill tag_first_idx of the sentry, since it contains the end of the tag range
+        // of the last node
+        nodes.grow()?.set_tag_first_idx(tags.next_index());
         nodes.close()?;
         pb.finish();
     }
@@ -480,9 +456,6 @@ fn run() -> Result<(), Error> {
         pb.message("Converting ways...");
 
         let mut ways = builder.start_ways()?;
-        ways.grow()?; // index 0 is reserved for invalid way
-        ways_id_to_idx.skip(1);
-
         for idx in index {
             let block: osmpbf::PrimitiveBlock = read_block(&mut file, &idx)?;
             stats += serialize_ways(
@@ -523,10 +496,7 @@ fn run() -> Result<(), Error> {
         pb.message("Converting relations...");
 
         let mut relations = builder.start_relations()?;
-        relations.grow()?; // index 0 is reserved for invalid relation
-
         let mut relation_members = builder.start_relation_members()?;
-        relation_members.grow()?; // index 0 is ALSO reserved for invalid relation
 
         for idx in index {
             let block: osmpbf::PrimitiveBlock = read_block(&mut file, &idx)?;
