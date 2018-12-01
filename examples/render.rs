@@ -297,6 +297,7 @@ where
     let mut document = Document::new().set("viewBox", (0, 0, width, height));
     let mut road_group = element::Group::new()
         .set("stroke", "#001F3F")
+        .set("stroke-width", "0.3")
         .set("fill", "none");
     let mut park_group = element::Group::new()
         .set("stroke", "#3D9970")
