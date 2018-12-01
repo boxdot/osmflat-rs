@@ -12,27 +12,27 @@ extern crate svg;
 use failure::Error;
 use flatdata::{Archive, FileResourceStorage};
 use png::HasParameters;
+use structopt::StructOpt;
 use svg::node::element::{Group, Polyline};
 use svg::Document;
-use structopt::StructOpt;
 
 use std::convert;
 use std::fs::File;
 use std::io::BufWriter;
-use std::path::{PathBuf};
+use std::path::PathBuf;
 
 use std::str;
 
 #[derive(Debug, StructOpt)]
 #[structopt(name = "osmflat-render")]
 struct Args {
-    #[structopt(short = "f", long = "flatdata-archive")]
-    flatdata_archive: String,
+    #[structopt(short = "f", long = "flatdata-archive", parse(from_os_str))]
+    flatdata_archive: PathBuf,
 
     #[structopt(short = "o", long = "output", parse(from_os_str))]
     output: PathBuf,
 
-    #[structopt(short = "w", long = "width", default_value="4000")]
+    #[structopt(short = "w", long = "width", default_value = "4000")]
     flag_width: u32,
 }
 
@@ -276,64 +276,73 @@ fn render(archive: &osmflat::Osm, output_path: &std::path::Path, width: u32) -> 
         .expect("stringtable contains invalid utf8 characters");
 
     println!("Relations: {}", relations.len());
-    let parks = relations.iter().zip(relations.iter().skip(1)).enumerate().filter_map(|(relation_idx, (relation, next_relation))| {
-        let start_tag_idx = relation.tag_first_idx();
-        let end_tag_idx = next_relation.tag_first_idx();
-        let mut is_multipolygon = false;
-        let mut is_park = false;
-        let mut is_lake = false;
-        for tag_idx in start_tag_idx..end_tag_idx {
-            let tag = tags.at(tags_index.at(tag_idx as usize).value() as usize);
-            let key = substring(strings, tag.key_idx());
-            let val = substring(strings, tag.value_idx());
-            if key == "type" && val == "multipolygon" {
-                is_multipolygon = true;
-            }
-            if (key == "leisure" && val == "park") || (key == "landuse" && (val == "recreation_ground" || val == "forest")) {
-                is_park = true;
-            }
-            if key == "water" && val == "lake" {
-                is_lake = true;
-            }
-        }
-        if is_multipolygon {
-            if is_park {
-                return Some((WayType::Park, relation_idx))
-            }
-        }
-        if is_lake {
-            return Some((WayType::Lake, relation_idx))
-        }
-        None
-    }).map(|(way_type, relation_idx)| {
-        let members = relation_members.at(relation_idx);
-        let outline = members.filter_map(|m| {
-            match m {
-                osmflat::RefRelationMembers::WayMember(way_member) => {
-                    let role = substring(strings, way_member.role_idx());
-                    if role == "outer" {
-                        Some( way_member.way_idx() )
-                    } else {
-                        None
-                    }
+    let parks = relations
+        .iter()
+        .zip(relations.iter().skip(1))
+        .enumerate()
+        .filter_map(|(relation_idx, (relation, next_relation))| {
+            let start_tag_idx = relation.tag_first_idx();
+            let end_tag_idx = next_relation.tag_first_idx();
+            let mut is_multipolygon = false;
+            let mut is_park = false;
+            let mut is_lake = false;
+            for tag_idx in start_tag_idx..end_tag_idx {
+                let tag = tags.at(tags_index.at(tag_idx as usize).value() as usize);
+                let key = substring(strings, tag.key_idx());
+                let val = substring(strings, tag.value_idx());
+                if key == "type" && val == "multipolygon" {
+                    is_multipolygon = true;
                 }
-                _ => { None }
+                if (key == "leisure" && val == "park")
+                    || (key == "landuse" && (val == "recreation_ground" || val == "forest"))
+                {
+                    is_park = true;
+                }
+                if key == "water" && val == "lake" {
+                    is_lake = true;
+                }
             }
-        }).map(|way_idx| {
-            let way = archive.ways().at(way_idx as usize);
-            let next_way = archive.ways().at(way_idx as usize + 1);
-            (way.ref_first_idx(), next_way.ref_first_idx())
+            if is_multipolygon {
+                if is_park {
+                    return Some((WayType::Park, relation_idx));
+                }
+            }
+            if is_lake {
+                return Some((WayType::Lake, relation_idx));
+            }
+            None
+        })
+        .map(|(way_type, relation_idx)| {
+            let members = relation_members.at(relation_idx);
+            let outline = members
+                .filter_map(|m| match m {
+                    osmflat::RefRelationMembers::WayMember(way_member) => {
+                        let role = substring(strings, way_member.role_idx());
+                        if role == "outer" {
+                            Some(way_member.way_idx())
+                        } else {
+                            None
+                        }
+                    }
+                    _ => None,
+                })
+                .map(|way_idx| {
+                    let way = archive.ways().at(way_idx as usize);
+                    let next_way = archive.ways().at(way_idx as usize + 1);
+                    (way.ref_first_idx(), next_way.ref_first_idx())
+                });
+
+            (way_type, outline)
         });
 
-        (way_type, outline)
-    });
-
-    let roads = ways.iter()
+    let roads = ways
+        .iter()
         .zip(ways.iter().skip(1))
         .filter_map(|(way, next_way)| way_filter(&way, &next_way, &tags_index, &tags, strings));
 
     // compute extent
-    let mut coords = roads.clone()
+    let mut coords = roads
+        .clone()
         .flat_map(|way_type| NodesIterator::from_way_type(archive, &way_type).map(GeoCoord::from));
 
     let first_coord = coords.next().expect("no roads found");
@@ -358,7 +367,7 @@ fn render(archive: &osmflat::Osm, output_path: &std::path::Path, width: u32) -> 
 
     let park_paths = parks.map(|(way_type, park)| {
         let coordinates = park.fold(vec![], |mut acc, (start_node_idx, end_node_idx)| {
-            let nodes =  NodesIterator {
+            let nodes = NodesIterator {
                 nodes: archive.nodes(),
                 nodes_index: archive.nodes_index(),
                 next: start_node_idx as usize,
@@ -366,7 +375,7 @@ fn render(archive: &osmflat::Osm, output_path: &std::path::Path, width: u32) -> 
             };
             for node in nodes {
                 acc.push(t.transform(GeoCoord::from(node)))
-            };
+            }
             acc
         });
 
@@ -398,7 +407,9 @@ fn render(archive: &osmflat::Osm, output_path: &std::path::Path, width: u32) -> 
                     .set("fill", "#3D9970")
                     .set("fill-opacity", 0.3);
                 let mut river_group = Group::new().set("stroke", "#0074D9").set("fill", "none");
-                let mut lake_group = Group::new().set("stroke", "#0074D9").set("fill", "#0074D9")
+                let mut lake_group = Group::new()
+                    .set("stroke", "#0074D9")
+                    .set("fill", "#0074D9")
                     .set("fill-opacity", 0.3);
                 for (mut nodes_iterator, way_type) in paths.chain(park_paths) {
                     let v: Vec<String> = nodes_iterator
@@ -427,13 +438,17 @@ fn render(archive: &osmflat::Osm, output_path: &std::path::Path, width: u32) -> 
                         }
                         WayType::Lake => {
                             println!("Rendering Lake");
-                            let mut polyline = Polyline::new().set("points", v.join( " "));
+                            let mut polyline = Polyline::new().set("points", v.join(" "));
                             lake_group = lake_group.add(polyline);
                         }
                     }
                 }
 
-                document = document.add(road_group).add(park_group).add(river_group).add(lake_group);
+                document = document
+                    .add(road_group)
+                    .add(park_group)
+                    .add(river_group)
+                    .add(lake_group);
                 svg::save(output_path, &document)?;
             }
             _ => bail!("File extension not supported."),
@@ -446,7 +461,7 @@ fn render(archive: &osmflat::Osm, output_path: &std::path::Path, width: u32) -> 
 fn main() -> Result<(), Error> {
     let args = Args::from_args();
 
-    let storage = FileResourceStorage::new(args.flatdata_archive.into());
+    let storage = FileResourceStorage::new(args.flatdata_archive);
     let archive = osmflat::Osm::open(storage)?;
     render(&archive, &args.output, args.flag_width)?;
     Ok(())
