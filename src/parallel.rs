@@ -2,15 +2,19 @@ use std::sync::{mpsc::sync_channel, Arc, Condvar, Mutex};
 
 // allows producing data in parallel while still consuming it in the main thread
 // in order
-pub fn parallel_process<Item, Context, Data, Error>(
-    iter: impl ExactSizeIterator<Item = Item> + Send + 'static,
-    create_thread_context: impl Fn() -> Result<Context, Error>,
-    produce: impl Fn(&mut Context, Item) -> Data + Clone + Send + 'static,
-    mut consume: impl FnMut(Data) -> Result<(), Error>,
+pub fn parallel_process<Iter, Item, Context, Consumer, ContextCreator, Data, Error, Producer>(
+    iter: Iter,
+    create_thread_context: ContextCreator,
+    produce: Producer,
+    mut consume: Consumer,
 ) -> Result<(), Error>
 where
+    Iter: ExactSizeIterator<Item = Item> + Send + 'static,
     Context: Send + 'static,
+    ContextCreator: Fn() -> Result<Context, Error>,
     Data: Send + 'static,
+    Producer: Fn(&mut Context, Item) -> Data + Clone + Send + 'static,
+    Consumer: FnMut(Data) -> Result<(), Error>,
 {
     let iter = Arc::new(Mutex::new(iter.enumerate()));
     let next = Arc::new((Mutex::new(0_usize), Condvar::new()));
