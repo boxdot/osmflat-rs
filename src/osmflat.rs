@@ -234,6 +234,10 @@ const u64 INVALID_IDX = 1099511627775;
 }
 
 namespace osm {
+const u64 COORD_SCALE = 1000000000;
+}
+
+namespace osm {
 @bound_implicitly( Relations : .osm.Osm.relations, .osm.Osm.relation_members )
 archive Osm
 {
@@ -494,6 +498,8 @@ archive Osm
 
 // Max 40 bits value used to indicate null references
 pub const INVALID_IDX: u64 = 1099511627775;
+// All coordinate were scaled by this to convert them to integers
+pub const COORD_SCALE: u64 = 1000000000;
 
 define_struct!(
     Header,
