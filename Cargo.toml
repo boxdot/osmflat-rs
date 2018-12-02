@@ -14,7 +14,7 @@ byteorder = "1.2"
 bytes = "0.4"
 colored = "1.6"
 failure = "0.1"
-flatdata = { git = "https://github.com/boxdot/flatdata-rs", rev = "df86fda4" }
+flatdata = { path = "../flatdata-rs" }
 flate2 = "1.0"
 itertools = "0.7"
 log = "0.4"
@@ -31,6 +31,7 @@ prost-build = "0.3"
 [dev-dependencies]
 proptest = "0.6.0"
 svg = "0.5"
+smallvec = "0.6"
 
 [[bin]]
 name = "osmflatc"

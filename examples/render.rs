@@ -1,10 +1,14 @@
 extern crate flatdata;
 extern crate itertools;
 extern crate osmflat;
+#[macro_use]
+extern crate smallvec;
 extern crate structopt;
 extern crate svg;
 
 use flatdata::{Archive, FileResourceStorage};
+use smallvec::SmallVec;
+use std::fmt::Write;
 use structopt::StructOpt;
 use svg::node::element;
 use svg::Document;
@@ -63,12 +67,14 @@ impl<'a> From<osmflat::RefNode<'a>> for GeoCoord {
 }
 
 struct Polyline {
-    inner: Vec<Range<u64>>, // TODO: use small vec optimization
+    inner: SmallVec<[Range<u64>; 4]>,
 }
 
 impl From<Range<u64>> for Polyline {
     fn from(range: Range<u64>) -> Self {
-        Self { inner: vec![range] }
+        Self {
+            inner: smallvec![range],
+        }
     }
 }
 
@@ -90,7 +96,7 @@ impl Polyline {
 /// and resolves nodes as GeoCoord's.
 struct PolylineIter {
     archive: osmflat::Osm,
-    inner: Vec<Range<u64>>,
+    inner: SmallVec<[Range<u64>; 4]>,
     next_range: usize,
     next_element: u64,
 }
@@ -154,7 +160,7 @@ fn way_into_polyline(archive: osmflat::Osm, idx: u64) -> Polyline {
     let first_node_idx = way.ref_first_idx();
     let last_node_idx = next_way.ref_first_idx();
     Polyline {
-        inner: vec![first_node_idx..last_node_idx],
+        inner: smallvec![first_node_idx..last_node_idx],
     }
 }
 
@@ -321,19 +327,19 @@ where
         lon: f64::MIN,
     };
 
+    let mut points = String::new(); // reuse string buffer inside for loop
     for (poly, cat) in classified_polylines {
-        // TODO: Use itertools to avoid creation of intermediate vector and strings.
-        let poly: Vec<String> = poly
-            .into_iter(archive.clone())
-            .map(|coord| {
-                // collect extent
-                min_coord = min_coord.min(coord);
-                max_coord = max_coord.max(coord);
-                coord.into()
-            })
-            .collect();
+        points.clear();
+        for coord in poly.into_iter(archive.clone()) {
+            // collect extent
+            min_coord = min_coord.min(coord);
+            max_coord = max_coord.max(coord);
+            // accumulate polyline points
+            write!(&mut points, "{:.5},{:.5} ", coord.lon, coord.lat);
+        }
+
         let mut polyline = element::Polyline::new()
-            .set("points", poly.join(" "))
+            .set("points", &points[..])
             .set("vector-effect", "non-scaling-stroke");
 
         match cat {
