@@ -3,6 +3,9 @@ namespace osm {
 // Max 40 bits value used to indicate null references
 const u64 INVALID_IDX = 0xFFFFFFFFFF;
 
+// All coordinate were scaled by this to convert them to integers
+const u64 COORD_SCALE = 1000000000;
+
 struct Header {
     bbox_left: i64 : 64;
     bbox_right: i64 : 64;
