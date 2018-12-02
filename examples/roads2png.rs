@@ -1,23 +1,26 @@
 extern crate bresenham;
 extern crate failure;
 extern crate flatdata;
+extern crate itertools;
 extern crate osmflat;
 extern crate png;
+extern crate structopt;
 
 use bresenham::Bresenham;
 use failure::Error;
 use flatdata::{Archive, FileResourceStorage};
+use itertools::Itertools;
 use png::HasParameters;
+use structopt::StructOpt;
 
 use std::convert;
-use std::env;
 use std::fs::File;
 use std::io::BufWriter;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use std::str;
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, Copy)]
 struct GeoCoord {
     lat: f64,
     lon: f64,
@@ -49,20 +52,6 @@ impl<'a> convert::From<osmflat::RefNode<'a>> for GeoCoord {
     }
 }
 
-#[derive(Debug, Default, Clone, Copy)]
-struct Color {
-    r: u8,
-    g: u8,
-    b: u8,
-    a: u8,
-}
-
-impl Color {
-    fn new(r: u8, g: u8, b: u8, a: u8) -> Self {
-        Self { r, g, b, a }
-    }
-}
-
 #[derive(Debug)]
 struct Image {
     w: u32,
@@ -75,83 +64,53 @@ impl Image {
         Self {
             w,
             h,
-            data: vec![255; (w * h) as usize * 4],
+            data: vec![255; (w * h) as usize],
         }
     }
 
-    fn set(&mut self, x: u32, y: u32, c: Color) {
-        let i = (y * self.w + x) as usize * 4;
-        self.data[i + 0] = c.r;
-        self.data[i + 1] = c.g;
-        self.data[i + 2] = c.b;
-        self.data[i + 3] = c.a;
+    fn set_black(&mut self, x: u32, y: u32) {
+        self.data[(y * self.w + x) as usize] = 0;
     }
 }
 
 #[derive(Debug, Clone)]
 struct MapTransform {
-    width: u32,
-    height: u32,
     min_x: f64,
-    min_y: f64,
-    map_w: f64,
-    map_h: f64,
+    max_y: f64,
+    scale_x: f64,
+    scale_y: f64,
 }
 
 impl MapTransform {
     fn new(width: u32, height: u32, min: GeoCoord, max: GeoCoord) -> Self {
         Self {
-            width,
-            height,
             min_x: min.lon,
-            min_y: min.lat,
-            map_w: max.lon - min.lon,
-            map_h: max.lat - min.lat,
+            max_y: max.lat,
+            scale_x: (max.lon - min.lon) / (width as f64),
+            scale_y: (max.lat - min.lat) / (height as f64),
         }
     }
 
     fn transform(&self, coord: GeoCoord) -> (isize, isize) {
         (
-            ((coord.lon - self.min_x) / self.map_w * self.width as f64) as isize,
-            ((1f64 - (coord.lat - self.min_y) / self.map_h) * self.height as f64) as isize,
+            ((coord.lon - self.min_x) / self.scale_x) as isize,
+            ((self.max_y - coord.lat) / self.scale_y) as isize,
         )
     }
 }
 
-#[derive(Clone)]
-struct NodesIterator<'a> {
-    nodes: flatdata::ArrayView<'a, osmflat::Node>,
-    nodes_index: flatdata::ArrayView<'a, osmflat::NodeIndex>,
-    next: usize,
-    end: usize,
-}
-
-impl<'a> NodesIterator<'a> {
-    fn from_way(
-        archive: &'a osmflat::Osm,
-        way: &osmflat::RefWay,
-        next_way: &osmflat::RefWay,
-    ) -> Self {
-        Self {
-            nodes: archive.nodes(),
-            nodes_index: archive.nodes_index(),
-            next: way.ref_first_idx() as usize,
-            end: next_way.ref_first_idx() as usize,
-        }
-    }
-}
-
-impl<'a> Iterator for NodesIterator<'a> {
-    type Item = osmflat::RefNode<'a>;
-    fn next<'b>(&'b mut self) -> Option<Self::Item> {
-        if self.next < self.end {
-            let idx = self.next;
-            self.next += 1;
-            Some(self.nodes.at(self.nodes_index.at(idx).value() as usize))
-        } else {
-            None
-        }
-    }
+fn way_coords<'a>(
+    archive: &'a osmflat::Osm,
+    way: &osmflat::RefWay,
+    next_way: &osmflat::RefWay,
+) -> impl Iterator<Item = GeoCoord> + 'a {
+    let nodes = archive.nodes();
+    let nodes_index = archive.nodes_index();
+    let begin = way.ref_first_idx() as usize;
+    let end = next_way.ref_first_idx() as usize;
+    (begin..end)
+        .map(move |i| nodes.at(nodes_index.at(i).value() as usize))
+        .map(GeoCoord::from)
 }
 
 fn substring(strings: &str, start: u64) -> &str {
@@ -174,50 +133,53 @@ fn way_filter(
         return false;
     }
 
-    // Filter all ways that do not have a highway tag. Also check for specific
-    // values.
+    let unwanted_highway_types = [
+        "pedestrian",
+        "steps",
+        "footway",
+        "construction",
+        "bic",
+        "cycleway",
+        "layby",
+        "bridleway",
+        "path",
+    ];
+
+    // Filter all ways that do not have desirable highway tag.
     let start_tag_idx = way.tag_first_idx();
     let end_tag_idx = next_way.tag_first_idx();
-    for tag_idx in start_tag_idx..end_tag_idx {
+    (start_tag_idx..end_tag_idx).any(|tag_idx| {
         let tag = tags.at(tags_index.at(tag_idx as usize).value() as usize);
         let key = substring(strings, tag.key_idx());
         if key == "highway" {
             let val = substring(strings, tag.value_idx());
-            if val == "pedestrian"
-                || val == "steps"
-                || val == "footway"
-                || val == "construction"
-                || val == "bic"
-                || val == "cycleway"
-                || val == "layby"
-                || val == "bridleway"
-                || val == "path"
-            {
-                return false;
-            }
-            return true;
+            !unwanted_highway_types.contains(&val)
+        } else {
+            false
         }
-    }
-
-    false
+    })
 }
 
-fn render(archive: &osmflat::Osm, width: u32) -> Image {
+fn roads<'a>(
+    archive: &'a osmflat::Osm,
+) -> impl Iterator<Item = (osmflat::RefWay, osmflat::RefWay)> {
     let ways = archive.ways();
     let tags_index = archive.tags_index();
     let tags = archive.tags();
-    let strings = str::from_utf8(archive.stringtable())
-        .expect("stringtable contains invalid utf8 characters");
+    // we checked strings in the beginning, it's safe to do 0-overhead retrieval.
+    let strings = unsafe { str::from_utf8_unchecked(archive.stringtable()) };
 
-    let roads = ways
-        .iter()
-        .zip(ways.iter().skip(1))
-        .filter(|(way, next_way)| way_filter(&way, &next_way, &tags_index, &tags, strings));
+    ways.iter()
+        .tuple_windows()
+        .filter(move |(way, next_way)| way_filter(&way, &next_way, &tags_index, &tags, strings))
+}
+
+fn render(archive: &osmflat::Osm, width: u32) -> Image {
+    str::from_utf8(archive.stringtable()).expect("stringtable contains invalid utf8 characters");
 
     // compute extent
-    let mut coords = roads.clone().flat_map(|(way, next_way)| {
-        NodesIterator::from_way(archive, &way, &next_way).map(GeoCoord::from)
-    });
+    let mut coords =
+        roads(archive).flat_map(|(way, next_way)| way_coords(archive, &way, &next_way));
     let first_coord = coords.next().expect("no roads found");
     let (min, max) = coords.fold((first_coord, first_coord), |(min, max), coord| {
         (min.min(coord), max.max(coord))
@@ -233,41 +195,49 @@ fn render(archive: &osmflat::Osm, width: u32) -> Image {
     // draw
     let mut image = Image::new(width, height);
 
-    let lines = roads.flat_map(|(way, next_way)| {
-        let raster_coords = NodesIterator::from_way(archive, &way, &next_way)
-            .map(GeoCoord::from)
-            .map(|coord| t.transform(coord));
-        raster_coords.clone().zip(raster_coords.skip(1))
+    let lines = roads(archive).flat_map(|(way, next_way)| {
+        way_coords(archive, &way, &next_way)
+            .map(|coord| t.transform(coord))
+            .tuple_windows()
     });
 
     for (from, to) in lines {
         for (x, y) in Bresenham::new(from, to) {
-            image.set(x as u32, y as u32, Color::new(0, 0, 0, 255));
+            image.set_black(x as u32, y as u32);
         }
     }
 
     image
 }
 
+#[derive(StructOpt, Debug)]
+struct Opt {
+    #[structopt(short = "i", long = "input", parse(from_os_str))]
+    input: PathBuf,
+
+    #[structopt(short = "o", long = "output", parse(from_os_str))]
+    output: PathBuf,
+}
+
 fn main() -> Result<(), Error> {
     // Lets do 4k :D
     const WIDTH: u32 = 4 * 1080;
 
-    let mut args = env::args().skip(1);
-    let osmflat_path = args.next().unwrap();
-    let image_path = args.next().unwrap();
+    let opt = Opt::from_args();
 
-    let storage = FileResourceStorage::new(osmflat_path.into());
+    let storage = FileResourceStorage::new(opt.input);
     let archive = osmflat::Osm::open(storage)?;
 
     let image = render(&archive, WIDTH);
 
-    let path = Path::new(&image_path);
+    let path = Path::new(&opt.output);
     let file = File::create(path)?;
     let buf = BufWriter::new(file);
 
     let mut encoder = png::Encoder::new(buf, WIDTH, image.h);
-    encoder.set(png::ColorType::RGBA).set(png::BitDepth::Eight);
+    encoder
+        .set(png::ColorType::Grayscale)
+        .set(png::BitDepth::Eight);
     let mut writer = encoder.write_header()?;
 
     writer.write_image_data(&image.data[..])?;
