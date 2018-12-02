@@ -212,6 +212,7 @@ fn render(archive: &osmflat::Osm, width: u32) -> Image {
 
 #[derive(StructOpt, Debug)]
 struct Opt {
+    #[structopt(parse(from_os_str))]
     input: PathBuf,
 
     #[structopt(short = "o", long = "output", parse(from_os_str))]
