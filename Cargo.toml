@@ -38,4 +38,4 @@ name = "osmflatc"
 path = "src/main.rs"
 
 [[example]]
-name = "render"
+name = "render-svg"

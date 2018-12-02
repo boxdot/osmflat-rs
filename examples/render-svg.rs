@@ -1,3 +1,19 @@
+//! Example which renders selected features from a given osmflat archive into a
+//! svg.
+//!
+//! For supported features check `Category` enum and `classify` function.
+//!
+//! For each feature, we retrieve the coordinates lazily from osm nodes, and
+//! then produce polylines styled based on the category, cf. `render_svg`
+//! function. The coordinates are in lon, lat.
+//!
+//! Inside of svg we just use the coordinates as is (except for swapped x/y
+//! axes), plus we apply a transformation to adjust the coordinates to the
+//! viewport. Obviously, it is slower the render such svg on the screen.
+//! However, the final svg contains already so many polyline, that having alrady
+//! transformed coordinates does not change much. If you need speed when showing
+//! the svg, feel free to apply simplifications in this program.
+
 extern crate flatdata;
 extern crate itertools;
 extern crate osmflat;
@@ -26,18 +42,11 @@ fn substring(strings: &str, start: u64) -> &str {
     &strings[start..start + end]
 }
 
+/// Geographic coordinates represented by (latitude, longitude).
 #[derive(Debug, Clone, Copy, Default, PartialEq, PartialOrd)]
 struct GeoCoord {
     lat: f64,
     lon: f64,
-}
-
-impl Into<String> for GeoCoord {
-    fn into(self) -> String {
-        // Not, we need to revert lat/lon, since lat cooresponds to y-axis and lon to
-        // x-axis.
-        format!("{:.5},{:.5}", self.lon, self.lat)
-    }
 }
 
 impl GeoCoord {
@@ -56,9 +65,10 @@ impl GeoCoord {
     }
 }
 
+/// Convert osmflat Node into GeoCoord.
 impl<'a> From<osmflat::RefNode<'a>> for GeoCoord {
     fn from(node: osmflat::RefNode<'a>) -> Self {
-        const COORD_SCALE: f64 = 0.000000001;
+        const COORD_SCALE: f64 = 0.000_000_001;
         Self {
             lat: node.lat() as f64 * COORD_SCALE,
             lon: node.lon() as f64 * COORD_SCALE,
@@ -66,6 +76,7 @@ impl<'a> From<osmflat::RefNode<'a>> for GeoCoord {
     }
 }
 
+/// Polyline which can be transformed into an iterator over `GeoCoord`'s.
 struct Polyline {
     inner: SmallVec<[Range<u64>; 4]>,
 }
@@ -92,7 +103,7 @@ impl Polyline {
 
 /// Iterator over osmflat nodes.
 ///
-/// Polyline contains ranges of nodes. This iterator iterates over the ranges
+/// A polyline contains ranges of nodes. This iterator iterates over the ranges
 /// and resolves nodes as GeoCoord's.
 struct PolylineIter {
     archive: osmflat::Osm,
@@ -132,6 +143,7 @@ impl Iterator for PolylineIter {
     }
 }
 
+// Categories of features we support in this renderer.
 #[derive(Debug, Clone, Copy)]
 enum Category {
     Road,
@@ -140,6 +152,9 @@ enum Category {
     Water,
 }
 
+/// Feature in osmflat.
+///
+/// Idx points either into ways or relations, depending on the `Category`.
 struct Feature {
     idx: u64,
     cat: Category,
@@ -188,6 +203,7 @@ fn multipolygon_into_polyline(archive: osmflat::Osm, idx: u64) -> Polyline {
     Polyline { inner }
 }
 
+/// Classifies all features from osmflat we want to render.
 fn classify(archive: osmflat::Osm) -> impl Iterator<Item = Feature> {
     let inner_archive = archive.clone();
     let ways = (0..archive.ways().len() as u64 - 2).filter_map(move |idx| {
@@ -290,6 +306,7 @@ fn classify_relation(archive: osmflat::Osm, idx: u64) -> Option<Category> {
     None
 }
 
+/// Renders svg from classified polylines.
 fn render_svg<P>(
     archive: osmflat::Osm,
     classified_polylines: P,
@@ -327,7 +344,7 @@ where
         lon: f64::MIN,
     };
 
-    let mut points = String::new(); // reuse string buffer inside for loop
+    let mut points = String::new(); // reuse string buffer inside the for-loop
     for (poly, cat) in classified_polylines {
         points.clear();
         for coord in poly.into_iter(archive.clone()) {
@@ -335,7 +352,8 @@ where
             min_coord = min_coord.min(coord);
             max_coord = max_coord.max(coord);
             // accumulate polyline points
-            write!(&mut points, "{:.5},{:.5} ", coord.lon, coord.lat);
+            write!(&mut points, "{:.5},{:.5} ", coord.lon, coord.lat)
+                .expect("failed to write coordinates");
         }
 
         let mut polyline = element::Polyline::new()
@@ -361,9 +379,10 @@ where
     let mut transform = element::Group::new().set(
         "transform",
         format!(
-            "scale({:.5} {:.5}) translate({:.5} {:.5})",
-            width as f64 / (max_coord.lon - min_coord.lon),
-            -1. * (height as f64) / (max_coord.lat - min_coord.lat),
+            "scale({:.5} {:.5}) translate({:.5} {:.5})", /* Note: svg transformations are
+                                                          * applied from right to left */
+            f64::from(width) / (max_coord.lon - min_coord.lon),
+            f64::from(height) / (min_coord.lat - max_coord.lat), // invert y-axis
             -min_coord.lon,
             -max_coord.lat,
         ),
