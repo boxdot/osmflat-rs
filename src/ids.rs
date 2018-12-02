@@ -44,11 +44,6 @@ impl IdTableBuilder {
         result
     }
 
-    /// Skips a few ids (e.g. to reserve them for other uses)
-    pub fn skip(&mut self, count: u64) {
-        self.next_id += count;
-    }
-
     pub fn build(mut self) -> IdTable {
         self.data.par_iter_mut().for_each(|x| x.par_sort_unstable());
 
@@ -121,7 +116,7 @@ mod test {
     #[test]
     fn test_large_indices() {
         let mut builder = IdTableBuilder::new();
-        builder.skip(1u64 << 33);
+        builder.next_id += 1u64 << 33;
         let data = [2, 1, 1_u64 << 33, 1_u64 << 34];
         for x in data.iter() {
             builder.insert(*x);
