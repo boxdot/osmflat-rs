@@ -90,56 +90,20 @@ impl From<Range<u64>> for Polyline {
 }
 
 impl Polyline {
-    fn into_iter(self, archive: osmflat::Osm) -> PolylineIter {
-        let next_element = self.inner.first().map(|range| range.start).unwrap_or(0);
-        PolylineIter {
-            archive,
-            inner: self.inner,
-            next_range: 0,
-            next_element,
-        }
-    }
-}
-
-/// Iterator over osmflat nodes.
-///
-/// A polyline contains ranges of nodes. This iterator iterates over the ranges
-/// and resolves nodes as GeoCoord's.
-struct PolylineIter {
-    archive: osmflat::Osm,
-    inner: SmallVec<[Range<u64>; 4]>,
-    next_range: usize,
-    next_element: u64,
-}
-
-impl Iterator for PolylineIter {
-    type Item = GeoCoord;
-    fn next(&mut self) -> Option<GeoCoord> {
-        if self.next_range < self.inner.len() {
-            let range = &self.inner[self.next_range];
-            if self.next_element < range.end {
-                let node_idx = self
-                    .archive
-                    .nodes_index()
-                    .at(self.next_element as usize)
-                    .value();
-                let coord = self.archive.nodes().at(node_idx as usize).into();
-                self.next_element += 1;
-                if self.next_element == range.end {
-                    self.next_range += 1;
-                    self.next_element = self
-                        .inner
-                        .get(self.next_range)
-                        .map(|range| range.start)
-                        .unwrap_or(0);
-                }
-                Some(coord)
-            } else {
-                None
-            }
-        } else {
-            None
-        }
+    fn into_iter<'a>(self, archive: &'a osmflat::Osm) -> impl Iterator<Item = GeoCoord> + 'a {
+        let nodes_index = archive.nodes_index();
+        let nodes = archive.nodes();
+        self.inner
+            .into_iter()
+            .map(move |range| {
+                let nodes_index = nodes_index.clone();
+                let nodes = nodes.clone();
+                range.map(move |idx| {
+                    let node_idx = nodes_index.at(idx as usize).value();
+                    nodes.at(node_idx as usize).into()
+                })
+            })
+            .flatten()
     }
 }
 
@@ -161,15 +125,15 @@ struct Feature {
 }
 
 impl Feature {
-    fn into_polyline(self, archive: osmflat::Osm) -> Polyline {
+    fn into_polyline(self, archive: &osmflat::Osm) -> Polyline {
         match self.cat {
-            Category::Road | Category::River(_) => way_into_polyline(archive, self.idx),
-            Category::Park | Category::Water => multipolygon_into_polyline(archive, self.idx),
+            Category::Road | Category::River(_) => way_into_polyline(&archive, self.idx),
+            Category::Park | Category::Water => multipolygon_into_polyline(&archive, self.idx),
         }
     }
 }
 
-fn way_into_polyline(archive: osmflat::Osm, idx: u64) -> Polyline {
+fn way_into_polyline(archive: &osmflat::Osm, idx: u64) -> Polyline {
     let way = archive.ways().at(idx as usize);
     let next_way = archive.ways().at(idx as usize + 1);
     let first_node_idx = way.ref_first_idx();
@@ -179,7 +143,7 @@ fn way_into_polyline(archive: osmflat::Osm, idx: u64) -> Polyline {
     }
 }
 
-fn multipolygon_into_polyline(archive: osmflat::Osm, idx: u64) -> Polyline {
+fn multipolygon_into_polyline(archive: &osmflat::Osm, idx: u64) -> Polyline {
     let members = archive.relation_members().at(idx as usize);
     let strings = unsafe { str::from_utf8_unchecked(archive.stringtable()) };
     let ways = archive.ways();
@@ -204,18 +168,16 @@ fn multipolygon_into_polyline(archive: osmflat::Osm, idx: u64) -> Polyline {
 }
 
 /// Classifies all features from osmflat we want to render.
-fn classify(archive: osmflat::Osm) -> impl Iterator<Item = Feature> {
+fn classify<'a>(archive: &'a osmflat::Osm) -> impl Iterator<Item = Feature> + 'a {
     let inner_archive = archive.clone();
-    let ways = (0..archive.ways().len() as u64 - 2).filter_map(move |idx| {
-        classify_way(inner_archive.clone(), idx).map(|cat| Feature { idx, cat })
-    });
-    let rels = (0..archive.relations().len() as u64 - 2).filter_map(move |idx| {
-        classify_relation(archive.clone(), idx).map(|cat| Feature { idx, cat })
-    });
+    let ways = (0..archive.ways().len() as u64 - 2)
+        .filter_map(move |idx| classify_way(&inner_archive, idx).map(|cat| Feature { idx, cat }));
+    let rels = (0..archive.relations().len() as u64 - 2)
+        .filter_map(move |idx| classify_relation(archive, idx).map(|cat| Feature { idx, cat }));
     ways.chain(rels)
 }
 
-fn classify_way(archive: osmflat::Osm, idx: u64) -> Option<Category> {
+fn classify_way(archive: &osmflat::Osm, idx: u64) -> Option<Category> {
     let way = archive.ways().at(idx as usize);
     let next_way = archive.ways().at(idx as usize + 1);
     let tags = archive.tags();
@@ -264,7 +226,7 @@ fn classify_way(archive: osmflat::Osm, idx: u64) -> Option<Category> {
     None
 }
 
-fn classify_relation(archive: osmflat::Osm, idx: u64) -> Option<Category> {
+fn classify_relation(archive: &osmflat::Osm, idx: u64) -> Option<Category> {
     let relation = archive.relations().at(idx as usize);
     let next_relation = archive.relations().at(idx as usize + 1);
 
@@ -308,7 +270,7 @@ fn classify_relation(archive: osmflat::Osm, idx: u64) -> Option<Category> {
 
 /// Renders svg from classified polylines.
 fn render_svg<P>(
-    archive: osmflat::Osm,
+    archive: &osmflat::Osm,
     classified_polylines: P,
     output: PathBuf,
     width: u32,
@@ -347,7 +309,7 @@ where
     let mut points = String::new(); // reuse string buffer inside the for-loop
     for (poly, cat) in classified_polylines {
         points.clear();
-        for coord in poly.into_iter(archive.clone()) {
+        for coord in poly.into_iter(archive) {
             // collect extent
             min_coord = min_coord.min(coord);
             max_coord = max_coord.max(coord);
@@ -423,14 +385,14 @@ fn main() -> Result<(), Box<std::error::Error>> {
     let storage = FileResourceStorage::new(args.osmflat_archive);
     let archive = osmflat::Osm::open(storage)?;
 
-    let features = classify(archive.clone());
+    let features = classify(&archive);
     let archive_inner = archive.clone();
     let classified_polylines = features.map(move |f| {
         let cat = f.cat;
-        (f.into_polyline(archive_inner.clone()), cat)
+        (f.into_polyline(&archive_inner), cat)
     });
     render_svg(
-        archive,
+        &archive,
         classified_polylines,
         args.output,
         args.width,
