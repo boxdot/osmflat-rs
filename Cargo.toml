@@ -30,13 +30,12 @@ rayon = "1.0.3"
 prost-build = "0.3"
 
 [dev-dependencies]
+bresenham = "0.1"
+png = "0.13"
 proptest = "0.6.0"
-svg = "0.5"
 smallvec = "0.6"
+svg = "0.5"
 
 [[bin]]
 name = "osmflatc"
 path = "src/main.rs"
-
-[[example]]
-name = "render-svg"

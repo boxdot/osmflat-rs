@@ -25,6 +25,7 @@ mod args;
 mod ids;
 mod osmflat;
 mod osmpbf;
+mod parallel;
 mod stats;
 mod strings;
 
@@ -41,7 +42,7 @@ use structopt::StructOpt;
 
 use std::collections::{hash_map, HashMap};
 use std::fs::File;
-use std::io::{self, Read, Seek};
+use std::io;
 use std::str;
 
 fn serialize_header(
@@ -259,19 +260,32 @@ fn serialize_ways(
     Ok(stats)
 }
 
-fn build_relations_index<'a, F: Read + Seek, I: 'a + Iterator<Item = &'a BlockIndex>>(
-    reader: &mut F,
+fn build_relations_index<I, FileCreator>(
+    create_file: FileCreator,
     block_index: I,
-) -> Result<ids::IdTable, Error> {
+) -> Result<ids::IdTable, Error>
+where
+    I: ExactSizeIterator<Item = BlockIndex> + Send + 'static,
+    FileCreator: Fn() -> Result<File, Error>,
+{
     let mut result = ids::IdTableBuilder::new();
-    for block_idx in block_index {
-        let block: osmpbf::PrimitiveBlock = read_block(reader, &block_idx)?;
-        for group in &block.primitivegroup {
-            for relation in &group.relations {
-                result.insert(relation.id as u64);
+    let mut pb = ProgressBar::new(block_index.len() as u64);
+    pb.message("Building relations index...");
+    parallel::parallel_process(
+        block_index,
+        create_file,
+        |mut file, idx| read_block(&mut file, &idx),
+        |data: Result<osmpbf::PrimitiveBlock, io::Error>| -> Result<(), Error> {
+            for group in &data?.primitivegroup {
+                for relation in &group.relations {
+                    result.insert(relation.id as u64);
+                }
             }
-        }
-    }
+            pb.inc();
+            Ok(())
+        },
+    )?;
+
     Ok(result.build())
 }
 
@@ -360,6 +374,147 @@ fn serialize_relations(
     Ok(stats)
 }
 
+fn serialize_dense_node_blocks<FileCreator>(
+    builder: &osmflat::OsmBuilder,
+    blocks: Vec<BlockIndex>,
+    create_file: FileCreator,
+    tags: &mut TagSerializer,
+    stringtable: &mut StringTable,
+    stats: &mut Stats,
+) -> Result<ids::IdTable, Error>
+where
+    FileCreator: Fn() -> Result<File, Error>,
+{
+    let mut nodes_id_to_idx = ids::IdTableBuilder::new();
+    let mut nodes = builder.start_nodes()?;
+    let mut pb = ProgressBar::new(blocks.len() as u64);
+    pb.message("Converting dense nodes...");
+    parallel::parallel_process(
+        blocks.into_iter(),
+        create_file,
+        |mut file, idx| read_block(&mut file, &idx),
+        |data| -> Result<(), Error> {
+            *stats +=
+                serialize_dense_nodes(&data?, &mut nodes, &mut nodes_id_to_idx, stringtable, tags)?;
+            pb.inc();
+            Ok(())
+        },
+    )?;
+    // fill tag_first_idx of the sentry, since it contains the end of the tag range
+    // of the last node
+    nodes.grow()?.set_tag_first_idx(tags.next_index());
+    nodes.close()?;
+    info!("Dense nodes converted.");
+    let nodes_id_to_idx = nodes_id_to_idx.build();
+    info!("Dense index build.");
+    Ok(nodes_id_to_idx)
+}
+
+fn serialize_way_blocks<FileCreator>(
+    builder: &osmflat::OsmBuilder,
+    blocks: Vec<BlockIndex>,
+    create_file: FileCreator,
+    nodes_id_to_idx: &ids::IdTable,
+    tags: &mut TagSerializer,
+    stringtable: &mut StringTable,
+    stats: &mut Stats,
+) -> Result<ids::IdTable, Error>
+where
+    FileCreator: Fn() -> Result<File, Error>,
+{
+    let mut ways_id_to_idx = ids::IdTableBuilder::new();
+    let mut ways = builder.start_ways()?;
+    let mut pb = ProgressBar::new(blocks.len() as u64);
+    let mut nodes_index = builder.start_nodes_index()?;
+    pb.message("Converting ways...");
+    parallel::parallel_process(
+        blocks.into_iter(),
+        create_file,
+        |mut file, idx| read_block(&mut file, &idx),
+        |data| -> Result<(), Error> {
+            *stats += serialize_ways(
+                &data?,
+                &nodes_id_to_idx,
+                &mut ways,
+                &mut ways_id_to_idx,
+                stringtable,
+                tags,
+                &mut nodes_index,
+            )?;
+            pb.inc();
+            Ok(())
+        },
+    )?;
+
+    {
+        let mut sentinel = ways.grow()?;
+        sentinel.set_tag_first_idx(tags.next_index());
+        sentinel.set_ref_first_idx(nodes_index.len() as u64);
+    }
+    ways.close()?;
+    nodes_index.close()?;
+
+    info!("Ways converted.");
+    let ways_id_to_idx = ways_id_to_idx.build();
+    info!("Way index build.");
+    Ok(ways_id_to_idx)
+}
+
+fn serialize_relation_blocks<FileCreator>(
+    builder: &osmflat::OsmBuilder,
+    blocks: Vec<BlockIndex>,
+    create_file: FileCreator,
+    nodes_id_to_idx: &ids::IdTable,
+    ways_id_to_idx: &ids::IdTable,
+    tags: &mut TagSerializer,
+    stringtable: &mut StringTable,
+    stats: &mut Stats,
+) -> Result<(), Error>
+where
+    FileCreator: Fn() -> Result<File, Error> + Copy,
+{
+    // We need to build the index of relation ids first, since relations can refer
+    // again to relations.
+    let relations_id_to_idx = build_relations_index(create_file, blocks.clone().into_iter())?;
+
+    let mut relations = builder.start_relations()?;
+    let mut relation_members = builder.start_relation_members()?;
+
+    let mut pb = ProgressBar::new(blocks.len() as u64);
+    pb.message("Converting relations...");
+    parallel::parallel_process(
+        blocks.into_iter(),
+        create_file,
+        |mut file, idx| read_block(&mut file, &idx),
+        |data| -> Result<(), Error> {
+            *stats += serialize_relations(
+                &data?,
+                &nodes_id_to_idx,
+                &ways_id_to_idx,
+                &relations_id_to_idx,
+                stringtable,
+                &mut relations,
+                &mut relation_members,
+                tags,
+            )?;
+            pb.inc();
+            Ok(())
+        },
+    )?;
+
+    {
+        let mut sentinel = relations.grow()?;
+        sentinel.set_tag_first_idx(tags.next_index());
+    }
+
+    relations.close()?;
+    relation_members.close()?;
+
+    info!("Relations converted.");
+
+    Ok(())
+}
+
 fn run() -> Result<(), Error> {
     let args = args::Args::from_args();
     stderrlog::new()
@@ -377,7 +532,6 @@ fn run() -> Result<(), Error> {
     let mut stringtable = StringTable::new();
     let mut tags = TagSerializer::new(&builder)?;
     let infos = builder.start_infos()?; // TODO: Actually put some data in here
-    let mut nodes_index = builder.start_nodes_index()?;
     info!(
         "Initialized new osmflat archive at: {}",
         &args.output.display()
@@ -388,140 +542,67 @@ fn run() -> Result<(), Error> {
 
     // TODO: move out into a function
     let groups = block_index.into_iter().group_by(|b| b.block_type);
-    let mut pbf_header = None;
-    let mut pbf_dense_nodes = None;
-    let mut pbf_ways = None;
-    let mut pbf_relations = None;
+    let mut pbf_header = Vec::new();
+    let mut pbf_dense_nodes = Vec::new();
+    let mut pbf_ways = Vec::new();
+    let mut pbf_relations = Vec::new();
     for (block_type, blocks) in &groups {
         match block_type {
-            BlockType::Header => pbf_header = Some(blocks),
+            BlockType::Header => pbf_header = blocks.collect(),
             BlockType::Nodes => panic!("Found nodes block, only dense nodes are supported now"),
-            BlockType::DenseNodes => pbf_dense_nodes = Some(blocks),
-            BlockType::Ways => pbf_ways = Some(blocks),
-            BlockType::Relations => pbf_relations = Some(blocks),
+            BlockType::DenseNodes => pbf_dense_nodes = blocks.collect(),
+            BlockType::Ways => pbf_ways = blocks.collect(),
+            BlockType::Relations => pbf_relations = blocks.collect(),
         }
     }
     info!("PBF block index built.");
 
-    let mut file = File::open(args.input)?;
+    let mut file = File::open(&args.input)?;
 
     // Serialize header
-    let mut index = pbf_header.ok_or_else(|| format_err!("missing header block"))?;
-    let idx = index.next();
-    let pbf_header: osmpbf::HeaderBlock = read_block(&mut file, &idx.unwrap())?;
+    if pbf_header.len() != 1 {
+        return Err(format_err!(
+            "Require exactly one header block, but found {}",
+            pbf_header.len()
+        ));
+    }
+    let idx = &pbf_header[0];
+    let pbf_header: osmpbf::HeaderBlock = read_block(&mut file, &idx)?;
     serialize_header(&pbf_header, &builder, &mut stringtable)?;
-    ensure!(
-        index.next().is_none(),
-        "found multiple header blocks, which is not supported."
-    );
     info!("Header written.");
 
     let mut stats = Stats::default();
+    let create_input_file = || -> Result<File, Error> { Ok(File::open(&args.input)?) };
 
-    // Serialize dense nodes
-    let mut nodes_id_to_idx = ids::IdTableBuilder::new();
-    if let Some(index) = pbf_dense_nodes {
-        let index: Vec<_> = index.collect();
+    let nodes_id_to_idx = serialize_dense_node_blocks(
+        &builder,
+        pbf_dense_nodes,
+        create_input_file,
+        &mut tags,
+        &mut stringtable,
+        &mut stats,
+    )?;
 
-        let mut pb = ProgressBar::new(index.len() as u64);
-        pb.message("Converting dense nodes...");
-        let mut nodes = builder.start_nodes()?;
-        for idx in index {
-            let block: osmpbf::PrimitiveBlock = read_block(&mut file, &idx)?;
-            stats += serialize_dense_nodes(
-                &block,
-                &mut nodes,
-                &mut nodes_id_to_idx,
-                &mut stringtable,
-                &mut tags,
-            )?;
-            pb.inc();
-        }
-        // fill tag_first_idx of the sentry, since it contains the end of the tag range
-        // of the last node
-        nodes.grow()?.set_tag_first_idx(tags.next_index());
-        nodes.close()?;
-        pb.finish();
-    }
-    info!("Dense nodes converted.");
-    let nodes_id_to_idx = nodes_id_to_idx.build();
-    info!("Dense index build.");
+    let ways_id_to_idx = serialize_way_blocks(
+        &builder,
+        pbf_ways,
+        create_input_file,
+        &nodes_id_to_idx,
+        &mut tags,
+        &mut stringtable,
+        &mut stats,
+    )?;
 
-    // Serialize ways
-    let mut ways_id_to_idx = ids::IdTableBuilder::new();
-    if let Some(index) = pbf_ways {
-        let index: Vec<_> = index.collect();
-
-        let mut pb = ProgressBar::new(index.len() as u64);
-        pb.message("Converting ways...");
-
-        let mut ways = builder.start_ways()?;
-        for idx in index {
-            let block: osmpbf::PrimitiveBlock = read_block(&mut file, &idx)?;
-            stats += serialize_ways(
-                &block,
-                &nodes_id_to_idx,
-                &mut ways,
-                &mut ways_id_to_idx,
-                &mut stringtable,
-                &mut tags,
-                &mut nodes_index,
-            )?;
-            pb.inc();
-        }
-        {
-            let mut sentinel = ways.grow()?;
-            sentinel.set_tag_first_idx(tags.next_index());
-            sentinel.set_ref_first_idx(nodes_index.len() as u64);
-        }
-        ways.close()?;
-        pb.finish();
-    };
-    info!("Ways converted.");
-    let ways_id_to_idx = ways_id_to_idx.build();
-    info!("Way index build.");
-
-    // Serialize relations
-    if let Some(index) = pbf_relations {
-        let index: Vec<_> = index.collect();
-
-        info!("Building relations index...");
-
-        // We need to build the index of relation ids first, since relations can refer
-        // again to relations.
-        let relations_id_to_idx = build_relations_index(&mut file, index.iter())?;
-        info!("Relations index built.");
-
-        let mut pb = ProgressBar::new(index.len() as u64);
-        pb.message("Converting relations...");
-
-        let mut relations = builder.start_relations()?;
-        let mut relation_members = builder.start_relation_members()?;
-
-        for idx in index {
-            let block: osmpbf::PrimitiveBlock = read_block(&mut file, &idx)?;
-            stats += serialize_relations(
-                &block,
-                &nodes_id_to_idx,
-                &ways_id_to_idx,
-                &relations_id_to_idx,
-                &mut stringtable,
-                &mut relations,
-                &mut relation_members,
-                &mut tags,
-            )?;
-            pb.inc();
-        }
-        {
-            let mut sentinel = relations.grow()?;
-            sentinel.set_tag_first_idx(tags.next_index());
-        }
-
-        relations.close()?;
-        relation_members.close()?;
-        pb.finish();
-    };
-    info!("Relations converted.");
+    serialize_relation_blocks(
+        &builder,
+        pbf_relations,
+        create_input_file,
+        &nodes_id_to_idx,
+        &ways_id_to_idx,
+        &mut tags,
+        &mut stringtable,
+        &mut stats,
+    )?;
 
     // Finalize data structures
     tags.close(); // drop the reference to stringtable
@@ -530,7 +611,6 @@ fn run() -> Result<(), Error> {
     builder.set_stringtable(&stringtable.into_bytes())?;
 
     infos.close()?;
-    nodes_index.close()?;
 
     info!("osmflat archive built.");
 
