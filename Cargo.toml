@@ -14,7 +14,7 @@ byteorder = "1.2"
 bytes = "0.4"
 colored = "1.6"
 failure = "0.1"
-flatdata = { path = "../flatdata-rs" }
+flatdata = { git = "https://github.com/boxdot/flatdata-rs", rev = "df86fda4" }
 flate2 = "1.0"
 itertools = "0.7"
 log = "0.4"
