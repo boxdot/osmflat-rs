@@ -1,18 +1,17 @@
-use pbr::ProgressBar;
 use std::sync::{mpsc::sync_channel, Arc, Condvar, Mutex};
 
 // allows producing data in parallel while still consuming it in the main thread
 // in order
-pub fn parallel_process<Item, Context: Send + 'static, Data: Send + 'static, Error>(
-    progress_message: &str,
+pub fn parallel_process<Item, Context, Data, Error>(
     iter: impl ExactSizeIterator<Item = Item> + Send + 'static,
     create_thread_context: impl Fn() -> Result<Context, Error>,
     produce: impl Fn(&mut Context, Item) -> Data + Clone + Send + 'static,
     mut consume: impl FnMut(Data) -> Result<(), Error>,
-) -> Result<(), Error> {
-    let len = iter.len();
-    let mut pb = ProgressBar::new(len as u64);
-    pb.message(progress_message);
+) -> Result<(), Error>
+where
+    Context: Send + 'static,
+    Data: Send + 'static,
+{
     let iter = Arc::new(Mutex::new(iter.enumerate()));
     let next = Arc::new((Mutex::new(0_usize), Condvar::new()));
     let (sender, receiver) = sync_channel(rayon::current_num_threads());
@@ -43,8 +42,6 @@ pub fn parallel_process<Item, Context: Send + 'static, Data: Send + 'static, Err
     drop(sender); // drop to make sure iteration will finish once all senders are out of scope
     for result in receiver {
         consume(result)?;
-        pb.inc();
     }
-    pb.finish();
     Ok(())
 }

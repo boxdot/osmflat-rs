@@ -38,6 +38,7 @@ use colored::*;
 use failure::Error;
 use flatdata::{ArchiveBuilder, FileResourceStorage};
 use itertools::Itertools;
+use pbr::ProgressBar;
 use structopt::StructOpt;
 
 use std::collections::{hash_map, HashMap};
@@ -264,16 +265,17 @@ fn serialize_ways(
     Ok(stats)
 }
 
-fn build_relations_index<I: ExactSizeIterator<Item = BlockIndex> + Send + 'static>(
-    path: &PathBuf,
-    block_index: I,
-) -> Result<ids::IdTable, Error> {
+fn build_relations_index<I>(path: &PathBuf, block_index: I) -> Result<ids::IdTable, Error>
+where
+    I: ExactSizeIterator<Item = BlockIndex> + Send + 'static,
+{
     let mut result = ids::IdTableBuilder::new();
     result.skip(1); // Id 0 is reserved elsewhere
+    let mut pb = ProgressBar::new(block_index.len() as u64);
+    pb.message("Building relations index...");
     parallel::parallel_process(
-        "Building relations index...",
         block_index,
-        || -> Result<File, Error> { Ok(File::open(&path)?) },
+        || -> Result<File, Error> { Ok(File::open(path)?) },
         |mut file, idx| read_block(&mut file, &idx),
         |data: Result<osmpbf::PrimitiveBlock, io::Error>| -> Result<(), Error> {
             for group in &data?.primitivegroup {
@@ -281,6 +283,7 @@ fn build_relations_index<I: ExactSizeIterator<Item = BlockIndex> + Send + 'stati
                     result.insert(relation.id as u64);
                 }
             }
+            pb.inc();
             Ok(())
         },
     )?;
@@ -454,8 +457,9 @@ fn run() -> Result<(), Error> {
     if let Some(index) = pbf_dense_nodes {
         let mut nodes = builder.start_nodes()?;
         let index: Vec<_> = index.collect();
+        let mut pb = ProgressBar::new(index.len() as u64);
+        pb.message("Converting dense nodes...");
         parallel::parallel_process(
-            "Converting dense nodes...",
             index.into_iter(),
             || -> Result<File, Error> { Ok(File::open(&args.input)?) },
             |mut file, idx| read_block(&mut file, &idx),
@@ -467,6 +471,7 @@ fn run() -> Result<(), Error> {
                     &mut stringtable,
                     &mut tags,
                 )?;
+                pb.inc();
                 Ok(())
             },
         )?;
@@ -487,8 +492,9 @@ fn run() -> Result<(), Error> {
         ways.grow()?; // index 0 is reserved for invalid way
         ways_id_to_idx.skip(1);
         let index: Vec<_> = index.collect();
+        let mut pb = ProgressBar::new(index.len() as u64);
+        pb.message("Converting ways...");
         parallel::parallel_process(
-            "Converting ways...",
             index.into_iter(),
             || -> Result<File, Error> { Ok(File::open(&args.input)?) },
             |mut file, idx| read_block(&mut file, &idx),
@@ -502,6 +508,7 @@ fn run() -> Result<(), Error> {
                     &mut tags,
                     &mut nodes_index,
                 )?;
+                pb.inc();
                 Ok(())
             },
         )?;
@@ -531,8 +538,9 @@ fn run() -> Result<(), Error> {
         let mut relation_members = builder.start_relation_members()?;
         relation_members.grow()?; // index 0 is ALSO reserved for invalid relation
 
+        let mut pb = ProgressBar::new(index.len() as u64);
+        pb.message("Converting relations...");
         parallel::parallel_process(
-            "Converting relations...",
             index.into_iter(),
             || -> Result<File, Error> { Ok(File::open(&args.input)?) },
             |mut file, idx| read_block(&mut file, &idx),
@@ -547,6 +555,7 @@ fn run() -> Result<(), Error> {
                     &mut relation_members,
                     &mut tags,
                 )?;
+                pb.inc();
                 Ok(())
             },
         )?;
