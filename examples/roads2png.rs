@@ -212,29 +212,28 @@ fn render(archive: &osmflat::Osm, width: u32) -> Image {
 
 #[derive(StructOpt, Debug)]
 struct Opt {
-    #[structopt(short = "i", long = "input", parse(from_os_str))]
     input: PathBuf,
 
     #[structopt(short = "o", long = "output", parse(from_os_str))]
     output: PathBuf,
+
+    #[structopt(short = "w", long = "width", default_value = "4320")]
+    width: u32,
 }
 
 fn main() -> Result<(), Error> {
-    // Lets do 4k :D
-    const WIDTH: u32 = 4 * 1080;
-
     let opt = Opt::from_args();
 
     let storage = FileResourceStorage::new(opt.input);
     let archive = osmflat::Osm::open(storage)?;
 
-    let image = render(&archive, WIDTH);
+    let image = render(&archive, opt.width);
 
     let path = Path::new(&opt.output);
     let file = File::create(path)?;
     let buf = BufWriter::new(file);
 
-    let mut encoder = png::Encoder::new(buf, WIDTH, image.h);
+    let mut encoder = png::Encoder::new(buf, image.w, image.h);
     encoder
         .set(png::ColorType::Grayscale)
         .set(png::BitDepth::Eight);
