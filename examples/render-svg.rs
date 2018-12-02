@@ -68,7 +68,7 @@ impl GeoCoord {
 /// Convert osmflat Node into GeoCoord.
 impl<'a> From<osmflat::RefNode<'a>> for GeoCoord {
     fn from(node: osmflat::RefNode<'a>) -> Self {
-        const COORD_SCALE: f64 = 0.000_000_001;
+        const COORD_SCALE: f64 = 1. / osmflat::COORD_SCALE as f64;
         Self {
             lat: node.lat() as f64 * COORD_SCALE,
             lon: node.lon() as f64 * COORD_SCALE,
