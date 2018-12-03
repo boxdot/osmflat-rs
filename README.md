@@ -18,7 +18,7 @@ OSM [pbf format][PBF format] to osmflat data compiler.
 To compile OSM data from pbf to osmflat use:
 
 ```shell
-cargo run osmflatc -- input.osm.pbf output.osm.flatdata
+cargo run osmflatc --release -- input.osm.pbf output.osm.flatdata
 ```
 
 The output is a flatdata archive, which is a directory consisting of several
@@ -33,7 +33,6 @@ First, add this to your Cargo.toml:
 
 ```toml
 [dependencies]
-flatdata = "0.1.3"
 osmflat = "0.1.0"
 ```
 
@@ -41,18 +40,13 @@ Now, you can open an osmflat archive as any other flatdata archive and read its
 data:
 
 ```rust
-extern crate flatdata;
 extern crate osmflat;
 
-use flatdata::{Archive, FileResourceStorage};
-use std::rc::Rc;
-use std::cell::RefCell;
+use osmflat::Archive;
 
-fn main() -> Result<(), Error> {
-    let storage = Rc::new(RefCell::new(FileResourceStorage::new(
-        "path/to/archive.osm.flatdata".into()
-    )));
-    let archive = osmflat::Osm::open(storage)?;
+fn main() {
+    let storage = osmflat::FileResourceStorage::new("path/to/archive.osm.flatdata");
+    let archive = osmflat::Osm::open(storage).unwrap();
 
     for node in archive.nodes().iter() {
         println!("{:?}", node);
@@ -66,7 +60,7 @@ Cf. the [examples] directory for more examples. Feel free to add another
 example, if you have an idea what to with the amazing OSM data in few lines of
 code. 😁
 
-The above map was rendered by `examples/render` in 230 loc from the osmflat
+The above map was rendered by `examples/roads2png.rs` in ~ 200 loc from the osmflat
 archive based on the [latest][latest-berlin-map] Berlin OSM data.
 
 ## License
