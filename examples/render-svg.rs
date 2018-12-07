@@ -14,13 +14,8 @@
 //! transformed coordinates does not change much. If you need speed when showing
 //! the svg, feel free to apply simplifications in this program.
 
-extern crate flatdata;
-extern crate itertools;
-extern crate osmflat;
 #[macro_use]
 extern crate smallvec;
-extern crate structopt;
-extern crate svg;
 
 use flatdata::{Archive, FileResourceStorage};
 use smallvec::SmallVec;
@@ -66,8 +61,8 @@ impl GeoCoord {
 }
 
 /// Convert osmflat Node into GeoCoord.
-impl<'a> From<osmflat::RefNode<'a>> for GeoCoord {
-    fn from(node: osmflat::RefNode<'a>) -> Self {
+impl From<osmflat::RefNode<'_>> for GeoCoord {
+    fn from(node: osmflat::RefNode) -> Self {
         const COORD_SCALE: f64 = 1. / osmflat::COORD_SCALE as f64;
         Self {
             lat: node.lat() as f64 * COORD_SCALE,
@@ -318,7 +313,7 @@ where
                 .expect("failed to write coordinates");
         }
 
-        let mut polyline = element::Polyline::new()
+        let polyline = element::Polyline::new()
             .set("points", &points[..])
             .set("vector-effect", "non-scaling-stroke");
 
