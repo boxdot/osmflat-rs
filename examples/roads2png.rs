@@ -1,10 +1,3 @@
-extern crate bresenham;
-extern crate failure;
-extern crate itertools;
-extern crate osmflat;
-extern crate png;
-extern crate structopt;
-
 use bresenham::Bresenham;
 use failure::Error;
 use itertools::Itertools;

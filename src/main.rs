@@ -1,23 +1,14 @@
-extern crate byteorder;
-extern crate bytes;
-extern crate colored;
 #[macro_use]
 extern crate failure;
-extern crate flate2;
 #[macro_use]
 extern crate flatdata;
-extern crate itertools;
 #[macro_use]
 extern crate log;
-extern crate prost;
 #[macro_use]
 extern crate prost_derive;
-extern crate pbr;
 #[cfg(test)]
 #[macro_use]
 extern crate proptest;
-extern crate rayon;
-extern crate stderrlog;
 #[macro_use]
 extern crate structopt;
 
@@ -29,9 +20,9 @@ mod parallel;
 mod stats;
 mod strings;
 
-use osmpbf::{build_block_index, read_block, BlockIndex, BlockType};
-use stats::Stats;
-use strings::StringTable;
+use crate::osmpbf::{build_block_index, read_block, BlockIndex, BlockType};
+use crate::stats::Stats;
+use crate::strings::StringTable;
 
 use colored::*;
 use failure::Error;

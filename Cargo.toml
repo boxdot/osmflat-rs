@@ -8,6 +8,7 @@ repository = "https://github.com/boxdot/osmflat-rs"
 keywords = ["serialization", "osm", "openstreetmap", "flatdata"]
 categories = ["encoding"]
 readme = "README.md"
+edition = "2018"
 
 [dependencies]
 byteorder = "1.2"

@@ -6,4 +6,4 @@ pub use flatdata::{Archive, FileResourceStorage};
 
 mod osmflat;
 
-pub use osmflat::*;
+pub use crate::osmflat::*;
