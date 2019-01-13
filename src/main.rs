@@ -401,8 +401,9 @@ where
     nodes.grow()?.set_tag_first_idx(tags.next_index());
     nodes.close()?;
     info!("Dense nodes converted.");
+    info!("Building dense nodes index...");
     let nodes_id_to_idx = nodes_id_to_idx.build();
-    info!("Dense index build.");
+    info!("Dense nodes index built.");
     Ok(nodes_id_to_idx)
 }
 
@@ -451,8 +452,9 @@ where
     nodes_index.close()?;
 
     info!("Ways converted.");
+    info!("Building ways index...");
     let ways_id_to_idx = ways_id_to_idx.build();
-    info!("Way index build.");
+    info!("Way index built.");
     Ok(ways_id_to_idx)
 }
 
