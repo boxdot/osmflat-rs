@@ -190,15 +190,20 @@ fn serialize_dense_nodes(
                 node.set_tag_first_idx(tags.next_index());
                 loop {
                     let k = dense_nodes.keys_vals[tags_offset];
+                    tags_offset += 1;
+
                     if k == 0 {
                         break; // separator
                     }
-                    let v = dense_nodes.keys_vals[tags_offset + 1];
-                    tags_offset += 2;
+
+                    let v = dense_nodes.keys_vals[tags_offset];
+                    tags_offset += 1;
+
                     tags.serialize(string_refs[k as usize], string_refs[v as usize])?;
                 }
             }
         }
+        assert_eq!(tags_offset, dense_nodes.keys_vals.len());
         stats.num_nodes += dense_nodes.id.len();
     }
     Ok(stats)
@@ -396,8 +401,9 @@ where
     nodes.grow()?.set_tag_first_idx(tags.next_index());
     nodes.close()?;
     info!("Dense nodes converted.");
+    info!("Building dense nodes index...");
     let nodes_id_to_idx = nodes_id_to_idx.build();
-    info!("Dense index build.");
+    info!("Dense nodes index built.");
     Ok(nodes_id_to_idx)
 }
 
@@ -446,8 +452,9 @@ where
     nodes_index.close()?;
 
     info!("Ways converted.");
+    info!("Building ways index...");
     let ways_id_to_idx = ways_id_to_idx.build();
-    info!("Way index build.");
+    info!("Way index built.");
     Ok(ways_id_to_idx)
 }
 
