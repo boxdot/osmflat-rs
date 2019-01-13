@@ -190,15 +190,20 @@ fn serialize_dense_nodes(
                 node.set_tag_first_idx(tags.next_index());
                 loop {
                     let k = dense_nodes.keys_vals[tags_offset];
+                    tags_offset += 1;
+
                     if k == 0 {
                         break; // separator
                     }
-                    let v = dense_nodes.keys_vals[tags_offset + 1];
-                    tags_offset += 2;
+
+                    let v = dense_nodes.keys_vals[tags_offset];
+                    tags_offset += 1;
+
                     tags.serialize(string_refs[k as usize], string_refs[v as usize])?;
                 }
             }
         }
+        assert_eq!(tags_offset, dense_nodes.keys_vals.len());
         stats.num_nodes += dense_nodes.id.len();
     }
     Ok(stats)
