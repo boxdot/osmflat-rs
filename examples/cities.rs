@@ -47,8 +47,7 @@ fn tags_for_node(archive: &Osm, node_idx: usize) -> impl Iterator<Item = (&str, 
 fn main() -> Result<(), Box<Error>> {
     let archive_dir = env::args()
         .nth(1)
-        .ok_or_else(|| "USAGE: cities <osmflat-archive>")?
-        .into();
+        .ok_or_else(|| "USAGE: cities <osmflat-archive>")?;
     let archive = Osm::open(FileResourceStorage::new(archive_dir))?;
 
     // Iterate through all nodes (except last one, which is a sentinel i.e. does not

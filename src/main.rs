@@ -292,7 +292,7 @@ fn serialize_relations(
     relations_id_to_idx: &ids::IdTable,
     stringtable: &mut StringTable,
     relations: &mut flatdata::ExternalVector<osmflat::Relation>,
-    relation_members: &mut flatdata::MultiVector<osmflat::IndexType40, osmflat::RelationMembers>,
+    relation_members: &mut flatdata::MultiVector<osmflat::RelationMembers>,
     tags: &mut TagSerializer,
 ) -> Result<Stats, Error> {
     let mut stats = Stats::default();
