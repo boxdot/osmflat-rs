@@ -15,7 +15,7 @@ byteorder = "1.2"
 bytes = "0.4"
 colored = "1.6"
 failure = "0.1"
-flatdata = { git = "https://github.com/boxdot/flatdata-rs", rev = "df86fda4" }
+flatdata = { git = "https://github.com/heremaps/flatdata", rev = "67aed3f6f91eefa4974ecc89fe394f4830505f37" }
 flate2 = "1.0"
 itertools = "0.7"
 log = "0.4"

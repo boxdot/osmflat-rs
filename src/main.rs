@@ -84,7 +84,7 @@ fn serialize_header(
         header.set_osmosis_replication_base_url_idx(stringtable.push(url.clone()));
     }
 
-    builder.set_header(header.into_ref())?;
+    builder.set_header(header_buf.get())?;
     Ok(())
 }
 
@@ -292,7 +292,7 @@ fn serialize_relations(
     relations_id_to_idx: &ids::IdTable,
     stringtable: &mut StringTable,
     relations: &mut flatdata::ExternalVector<osmflat::Relation>,
-    relation_members: &mut flatdata::MultiVector<osmflat::IndexType40, osmflat::RelationMembers>,
+    relation_members: &mut flatdata::MultiVector<osmflat::RelationMembers>,
     tags: &mut TagSerializer,
 ) -> Result<Stats, Error> {
     let mut stats = Stats::default();

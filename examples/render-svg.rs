@@ -28,14 +28,6 @@ use std::f64;
 use std::io;
 use std::ops::Range;
 use std::path::PathBuf;
-use std::str;
-
-/// Helper function to read a string from osmflat.
-fn substring(strings: &str, start: u64) -> &str {
-    let start = start as usize;
-    let end = strings[start..].find('\0').expect("invalid string");
-    &strings[start..start + end]
-}
 
 /// Geographic coordinates represented by (latitude, longitude).
 #[derive(Debug, Clone, Copy, Default, PartialEq, PartialOrd)]
@@ -115,46 +107,35 @@ enum Category {
 ///
 /// Idx points either into ways or relations, depending on the `Category`.
 struct Feature {
-    idx: u64,
+    idx: usize,
     cat: Category,
 }
 
 impl Feature {
     fn into_polyline(self, archive: &osmflat::Osm) -> Polyline {
         match self.cat {
-            Category::Road | Category::River(_) => way_into_polyline(&archive, self.idx),
+            Category::Road | Category::River(_) => way_into_polyline(archive.ways().at(self.idx)),
             Category::Park | Category::Water => multipolygon_into_polyline(&archive, self.idx),
         }
     }
 }
 
-fn way_into_polyline(archive: &osmflat::Osm, idx: u64) -> Polyline {
-    let way = archive.ways().at(idx as usize);
-    let next_way = archive.ways().at(idx as usize + 1);
-    let first_node_idx = way.ref_first_idx();
-    let last_node_idx = next_way.ref_first_idx();
+fn way_into_polyline(way: osmflat::RefWay) -> Polyline {
     Polyline {
-        inner: smallvec![first_node_idx..last_node_idx],
+        inner: smallvec![way.refs()],
     }
 }
 
-fn multipolygon_into_polyline(archive: &osmflat::Osm, idx: u64) -> Polyline {
-    let members = archive.relation_members().at(idx as usize);
-    let strings = unsafe { str::from_utf8_unchecked(archive.stringtable()) };
-    let ways = archive.ways();
+fn multipolygon_into_polyline(archive: &osmflat::Osm, idx: usize) -> Polyline {
+    let members = archive.relation_members().at(idx);
+    let strings = archive.stringtable();
 
     let inner = members
         .filter_map(|m| match m {
-            osmflat::RefRelationMembers::WayMember(way_member) => {
-                let role = substring(strings, way_member.role_idx());
-                if role == "outer" {
-                    let way_idx = way_member.way_idx();
-                    let way = ways.at(way_idx as usize);
-                    let next_way = ways.at(way_idx as usize + 1);
-                    Some(way.ref_first_idx()..next_way.ref_first_idx())
-                } else {
-                    None
-                }
+            osmflat::RefRelationMembers::WayMember(way_member)
+                if strings.substring(way_member.role_idx() as usize) == Ok("outer") =>
+            {
+                Some(archive.ways().at(way_member.way_idx() as usize).refs())
             }
             _ => None,
         })
@@ -164,37 +145,26 @@ fn multipolygon_into_polyline(archive: &osmflat::Osm, idx: u64) -> Polyline {
 
 /// Classifies all features from osmflat we want to render.
 fn classify<'a>(archive: &'a osmflat::Osm) -> impl Iterator<Item = Feature> + 'a {
-    let inner_archive = archive.clone();
-    let ways = (0..archive.ways().len() as u64 - 2)
-        .filter_map(move |idx| classify_way(&inner_archive, idx).map(|cat| Feature { idx, cat }));
-    let rels = (0..archive.relations().len() as u64 - 2)
-        .filter_map(move |idx| classify_relation(archive, idx).map(|cat| Feature { idx, cat }));
+    let ways = archive.ways().iter().enumerate();
+    let ways = ways
+        .filter_map(move |(idx, way)| classify_way(archive, way).map(|cat| Feature { idx, cat }));
+    let rels = archive.relations().iter().enumerate();
+    let rels = rels.filter_map(move |(idx, rel)| {
+        classify_relation(archive, rel).map(|cat| Feature { idx, cat })
+    });
     ways.chain(rels)
 }
 
-fn classify_way(archive: &osmflat::Osm, idx: u64) -> Option<Category> {
-    let way = archive.ways().at(idx as usize);
-    let next_way = archive.ways().at(idx as usize + 1);
-    let tags = archive.tags();
-    let tags_index = archive.tags_index();
-    let strings = unsafe { str::from_utf8_unchecked(archive.stringtable()) };
-
+fn classify_way(archive: &osmflat::Osm, way: osmflat::RefWay) -> Option<Category> {
     // Filter all ways that have less than 2 nodes.
-    let start_node_idx = way.ref_first_idx();
-    let end_node_idx = next_way.ref_first_idx();
-    if end_node_idx - start_node_idx < 2 {
+    if way.refs().start < way.refs().end + 2 {
         return None;
     }
 
     // Filter all ways that do not have a highway tag. Also check for specific
     // values.
-    let start_tag_idx = way.tag_first_idx();
-    let end_tag_idx = next_way.tag_first_idx();
-    for tag_idx in start_tag_idx..end_tag_idx {
-        let tag = tags.at(tags_index.at(tag_idx as usize).value() as usize);
-        let key = substring(strings, tag.key_idx());
+    for (key, val) in osmflat::tags(archive, way.tags()).filter_map(Result::ok) {
         if key == "highway" {
-            let val = substring(strings, tag.value_idx());
             if val == "pedestrian"
                 || val == "steps"
                 || val == "footway"
@@ -209,11 +179,11 @@ fn classify_way(archive: &osmflat::Osm, idx: u64) -> Option<Category> {
             }
             return Some(Category::Road);
         } else if key == "waterway" {
-            let key = substring(strings, tag.key_idx());
-            if key == "width" || key == "maxwidth" {
-                let val = substring(strings, tag.value_idx());
-                let width: u32 = val.parse().ok()?;
-                return Some(Category::River(width));
+            for (key, val) in osmflat::tags(archive, way.tags()).filter_map(Result::ok) {
+                if key == "width" || key == "maxwidth" {
+                    let width: u32 = val.parse().ok()?;
+                    return Some(Category::River(width));
+                }
             }
             return Some(Category::River(1));
         }
@@ -221,25 +191,12 @@ fn classify_way(archive: &osmflat::Osm, idx: u64) -> Option<Category> {
     None
 }
 
-fn classify_relation(archive: &osmflat::Osm, idx: u64) -> Option<Category> {
-    let relation = archive.relations().at(idx as usize);
-    let next_relation = archive.relations().at(idx as usize + 1);
-
-    let start_tag_idx = relation.tag_first_idx();
-    let end_tag_idx = next_relation.tag_first_idx();
-
+fn classify_relation(archive: &osmflat::Osm, relation: osmflat::RefRelation) -> Option<Category> {
     let mut is_multipolygon = false;
     let mut is_park = false;
     let mut is_lake = false;
 
-    let tags = archive.tags();
-    let tags_index = archive.tags_index();
-    let strings = unsafe { str::from_utf8_unchecked(archive.stringtable()) };
-
-    for tag_idx in start_tag_idx..end_tag_idx {
-        let tag = tags.at(tags_index.at(tag_idx as usize).value() as usize);
-        let key = substring(strings, tag.key_idx());
-        let val = substring(strings, tag.value_idx());
+    for (key, val) in osmflat::tags(archive, relation.tags()).filter_map(Result::ok) {
         if key == "type" && val == "multipolygon" {
             is_multipolygon = true;
         }
@@ -251,13 +208,13 @@ fn classify_relation(archive: &osmflat::Osm, idx: u64) -> Option<Category> {
         if key == "water" && val == "lake" {
             is_lake = true;
         }
-
-        if is_multipolygon {
-            if is_park {
-                return Some(Category::Park);
-            } else if is_lake {
-                return Some(Category::Water);
-            }
+    }
+    if is_multipolygon {
+        if is_park {
+            return Some(Category::Park);
+        }
+        if is_lake {
+            return Some(Category::Water);
         }
     }
     None

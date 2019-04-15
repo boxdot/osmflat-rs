@@ -43,6 +43,7 @@ struct Node {
     id: i64 : 64;
     lat: i64 : 64;
     lon: i64 : 64;
+    @range(tags)
     tag_first_idx: u64 : 40;
     info_idx: u64 : 40;
 }
@@ -56,7 +57,9 @@ struct NodeIndex {
 
 struct Way {
     id: i64 : 64;
+    @range(tags)
     tag_first_idx: u64 : 40;
+    @range(refs)
     ref_first_idx: u64 : 40;
     info_idx: u64 : 40;
 }
@@ -85,6 +88,7 @@ struct RelationMember {
 
 struct Relation {
     id: i64 : 64;
+    @range(tags)
     tag_first_idx: u64 : 40;
     info_idx: u64 : 40;
 }
