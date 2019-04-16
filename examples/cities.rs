@@ -2,12 +2,7 @@
 //! name and population in JSON format.
 
 use flatdata::Archive;
-use osmflat::{FileResourceStorage, Osm};
 use serde::Serialize;
-
-use std::env;
-use std::error::Error;
-use std::io;
 
 #[derive(Debug, Default, Serialize)]
 struct City {
@@ -15,11 +10,11 @@ struct City {
     population: usize,
 }
 
-fn main() -> Result<(), Box<Error>> {
-    let archive_dir = env::args()
+fn main() -> Result<(), Box<std::error::Error>> {
+    let archive_dir = std::env::args()
         .nth(1)
         .ok_or_else(|| "USAGE: cities <osmflat-archive>")?;
-    let archive = Osm::open(FileResourceStorage::new(archive_dir))?;
+    let archive = osmflat::Osm::open(osmflat::FileResourceStorage::new(archive_dir))?;
 
     // Iterate through all nodes
     let cities: Vec<City> = archive
@@ -42,7 +37,7 @@ fn main() -> Result<(), Box<Error>> {
         })
         .collect();
 
-    let stdout = io::stdout();
+    let stdout = std::io::stdout();
     serde_json::to_writer(stdout.lock(), &cities)?;
 
     Ok(())
