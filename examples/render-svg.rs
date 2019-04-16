@@ -55,10 +55,9 @@ impl GeoCoord {
 /// Convert osmflat Node into GeoCoord.
 impl From<osmflat::RefNode<'_>> for GeoCoord {
     fn from(node: osmflat::RefNode) -> Self {
-        const COORD_SCALE: f64 = 1. / osmflat::COORD_SCALE as f64;
         Self {
-            lat: node.lat() as f64 * COORD_SCALE,
-            lon: node.lon() as f64 * COORD_SCALE,
+            lat: node.lat() as f64 / osmflat::COORD_SCALE as f64,
+            lon: node.lon() as f64 / osmflat::COORD_SCALE as f64,
         }
     }
 }
@@ -80,17 +79,11 @@ impl Polyline {
     fn into_iter<'a>(self, archive: &'a osmflat::Osm) -> impl Iterator<Item = GeoCoord> + 'a {
         let nodes_index = archive.nodes_index();
         let nodes = archive.nodes();
-        self.inner
-            .into_iter()
-            .map(move |range| {
-                let nodes_index = nodes_index.clone();
-                let nodes = nodes.clone();
-                range.map(move |idx| {
-                    let node_idx = nodes_index.at(idx as usize).value();
-                    nodes.at(node_idx as usize).into()
-                })
-            })
-            .flatten()
+        let to_node = move |idx| {
+            let node_idx = nodes_index.at(idx as usize).value();
+            nodes.at(node_idx as usize).into()
+        };
+        self.inner.into_iter().flatten().map(to_node)
     }
 }
 
@@ -161,20 +154,22 @@ fn classify_way(archive: &osmflat::Osm, way: osmflat::RefWay) -> Option<Category
         return None;
     }
 
-    // Filter all ways that do not have a highway tag. Also check for specific
-    // values.
+    let unwanted_highway_types = [
+        "pedestrian",
+        "steps",
+        "footway",
+        "construction",
+        "bic",
+        "cycleway",
+        "layby",
+        "bridleway",
+        "path",
+    ];
+
+    // Filter all ways that do not have a highway tag. Also check for specific values.
     for (key, val) in osmflat::tags(archive, way.tags()).filter_map(Result::ok) {
         if key == "highway" {
-            if val == "pedestrian"
-                || val == "steps"
-                || val == "footway"
-                || val == "construction"
-                || val == "bic"
-                || val == "cycleway"
-                || val == "layby"
-                || val == "bridleway"
-                || val == "path"
-            {
+            if unwanted_highway_types.contains(&val) {
                 return None;
             }
             return Some(Category::Road);
