@@ -121,14 +121,14 @@ impl BlockIndexIterator {
         let blob_len = blob_header.datasize as usize;
         self.cursor += blob_len;
 
-        if blob_header.type_ == "OSMHeader" {
+        if blob_header.r#type == "OSMHeader" {
             self.reader.seek(SeekFrom::Current(blob_len as i64))?;
             Ok(BlobInfo::Header(BlockIndex {
                 block_type: BlockType::Header,
                 blob_start,
                 blob_len,
             }))
-        } else if blob_header.type_ == "OSMData" {
+        } else if blob_header.r#type == "OSMData" {
             // read blob
             let mut result = Vec::new();
             result.resize(blob_header.datasize as usize, 0);

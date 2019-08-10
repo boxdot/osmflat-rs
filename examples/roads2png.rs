@@ -1,7 +1,6 @@
 use bresenham::Bresenham;
 use itertools::Itertools;
 use osmflat::*;
-use png::HasParameters;
 use structopt::StructOpt;
 
 use std::f64::consts::PI;
@@ -159,9 +158,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let buf = BufWriter::new(File::create(&args.output)?);
     let mut encoder = png::Encoder::new(buf, image.w, image.h);
-    encoder
-        .set(png::ColorType::Grayscale)
-        .set(png::BitDepth::Eight);
+    encoder.set_color(png::ColorType::Grayscale);
+    encoder.set_depth(png::BitDepth::Eight);
     let mut writer = encoder.write_header()?;
     writer.write_image_data(&image.data[..])?;
 

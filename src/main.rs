@@ -1,10 +1,5 @@
 #[macro_use]
 extern crate flatdata;
-#[macro_use]
-extern crate prost_derive;
-#[cfg(test)]
-#[macro_use]
-extern crate proptest;
 
 mod args;
 mod ids;
