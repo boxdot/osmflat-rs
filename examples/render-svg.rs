@@ -14,17 +14,13 @@
 //! transformed coordinates does not change much. If you need speed when showing
 //! the svg, feel free to apply simplifications in this program.
 
-#[macro_use]
-extern crate smallvec;
-
 use flatdata::{Archive, FileResourceStorage};
-use smallvec::SmallVec;
-use std::fmt::Write;
+use smallvec::{smallvec, SmallVec};
 use structopt::StructOpt;
-use svg::node::element;
-use svg::Document;
+use svg::{node::element, Document};
 
 use std::f64;
+use std::fmt::Write;
 use std::io;
 use std::ops::Range;
 use std::path::PathBuf;
@@ -154,7 +150,7 @@ fn classify_way(archive: &osmflat::Osm, way: osmflat::RefWay) -> Option<Category
         return None;
     }
 
-    let unwanted_highway_types = [
+    const UNWANTED_HIGHWAY_TYPES: [&str; 9] = [
         "pedestrian",
         "steps",
         "footway",
@@ -169,7 +165,7 @@ fn classify_way(archive: &osmflat::Osm, way: osmflat::RefWay) -> Option<Category
     // Filter all ways that do not have a highway tag. Also check for specific values.
     for (key, val) in osmflat::tags(archive, way.tags()).filter_map(Result::ok) {
         if key == "highway" {
-            if unwanted_highway_types.contains(&val) {
+            if UNWANTED_HIGHWAY_TYPES.contains(&val) {
                 return None;
             }
             return Some(Category::Road);

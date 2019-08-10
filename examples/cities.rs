@@ -10,10 +10,10 @@ struct City {
     population: usize,
 }
 
-fn main() -> Result<(), Box<std::error::Error>> {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     let archive_dir = std::env::args()
         .nth(1)
-        .ok_or_else(|| "USAGE: cities <osmflat-archive>")?;
+        .ok_or("USAGE: cities <osmflat-archive>")?;
     let archive = osmflat::Osm::open(osmflat::FileResourceStorage::new(archive_dir))?;
 
     // Iterate through all nodes

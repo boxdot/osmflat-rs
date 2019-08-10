@@ -1,10 +1,10 @@
 use bresenham::Bresenham;
-use failure::Error;
 use itertools::Itertools;
 use osmflat::*;
 use png::HasParameters;
 use structopt::StructOpt;
 
+use std::f64::consts::PI;
 use std::fs::File;
 use std::io::BufWriter;
 use std::path::PathBuf;
@@ -48,7 +48,7 @@ impl Image {
 }
 
 fn compute_bounds(mut iter: impl Iterator<Item = GeoCoord>) -> (GeoCoord, GeoCoord) {
-    let first_coord = iter.next().unwrap_or(Default::default());
+    let first_coord = iter.next().unwrap_or_default();
     iter.fold((first_coord, first_coord), |(min, max), coord| {
         (
             GeoCoord {
@@ -69,15 +69,15 @@ fn map_transform(
 ) -> impl FnMut(GeoCoord) -> (isize, isize) + Copy {
     move |coord: GeoCoord| {
         (
-            ((coord.lon - min.lon) * width as f64 / (max.lon - min.lon)) as isize,
-            ((max.lat - coord.lat) * height as f64 / (max.lat - min.lat)) as isize,
+            ((coord.lon - min.lon) * f64::from(width) / (max.lon - min.lon)) as isize,
+            ((max.lat - coord.lat) * f64::from(height) / (max.lat - min.lat)) as isize,
         )
     }
 }
 
 fn way_coords<'a>(
     archive: &'a osmflat::Osm,
-    way: &osmflat::RefWay,
+    way: osmflat::RefWay,
 ) -> impl Iterator<Item = GeoCoord> + 'a {
     let nodes = archive.nodes();
     let nodes_index = archive.nodes_index();
@@ -85,7 +85,7 @@ fn way_coords<'a>(
         .map(move |i| nodes.at(nodes_index.at(i as usize).value() as usize).into())
 }
 
-fn way_filter(way: &osmflat::RefWay, archive: &osmflat::Osm) -> bool {
+fn way_filter(way: osmflat::RefWay, archive: &osmflat::Osm) -> bool {
     let unwanted_highway_types = [
         "pedestrian",
         "steps",
@@ -104,22 +104,21 @@ fn way_filter(way: &osmflat::RefWay, archive: &osmflat::Osm) -> bool {
         .any(|(key, val)| key == "highway" && !unwanted_highway_types.contains(&val))
 }
 
-fn roads<'a>(archive: &'a osmflat::Osm) -> impl Iterator<Item = osmflat::RefWay> {
+fn roads(archive: &osmflat::Osm) -> impl Iterator<Item = osmflat::RefWay> {
     archive
         .ways()
         .iter()
-        .filter(move |way| way_filter(&way, archive))
+        .filter(move |&way| way_filter(way, archive))
 }
 
 fn render(archive: &osmflat::Osm, width: u32) -> Image {
     // compute extent
-    let coords = roads(archive).flat_map(|way| way_coords(archive, &way));
+    let coords = roads(archive).flat_map(|way| way_coords(archive, way));
     let (min, max) = compute_bounds(coords);
 
     // compute ratio and height
-    let ratio =
-        (max.lat - min.lat) / (max.lon - min.lon) / (max.lat / 180. * std::f64::consts::PI).cos();
-    let height = (width as f64 * ratio) as u32;
+    let ratio = (max.lat - min.lat) / (max.lon - min.lon) / (max.lat / 180. * PI).cos();
+    let height = (f64::from(width) * ratio) as u32;
 
     // create world -> raster transformation
     let t = map_transform((width - 1, height - 1), (min, max));
@@ -128,7 +127,7 @@ fn render(archive: &osmflat::Osm, width: u32) -> Image {
     let mut image = Image::new(width, height);
 
     let line_segments =
-        roads(archive).flat_map(|way| way_coords(archive, &way).map(t).tuple_windows());
+        roads(archive).flat_map(|way| way_coords(archive, way).map(t).tuple_windows());
 
     for (from, to) in line_segments {
         for (x, y) in Bresenham::new(from, to) {
@@ -140,7 +139,7 @@ fn render(archive: &osmflat::Osm, width: u32) -> Image {
 }
 
 #[derive(StructOpt, Debug)]
-struct Opt {
+struct Args {
     #[structopt(parse(from_os_str))]
     input: PathBuf,
 
@@ -151,14 +150,14 @@ struct Opt {
     width: u32,
 }
 
-fn main() -> Result<(), Error> {
-    let opt = Opt::from_args();
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let args = Args::from_args();
 
-    let archive = Osm::open(FileResourceStorage::new(opt.input))?;
+    let archive = Osm::open(FileResourceStorage::new(args.input))?;
 
-    let image = render(&archive, opt.width);
+    let image = render(&archive, args.width);
 
-    let buf = BufWriter::new(File::create(&opt.output)?);
+    let buf = BufWriter::new(File::create(&args.output)?);
     let mut encoder = png::Encoder::new(buf, image.w, image.h);
     encoder
         .set(png::ColorType::Grayscale)

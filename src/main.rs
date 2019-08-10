@@ -1,16 +1,10 @@
 #[macro_use]
-extern crate failure;
-#[macro_use]
 extern crate flatdata;
-#[macro_use]
-extern crate log;
 #[macro_use]
 extern crate prost_derive;
 #[cfg(test)]
 #[macro_use]
 extern crate proptest;
-#[macro_use]
-extern crate structopt;
 
 mod args;
 mod ids;
@@ -25,9 +19,10 @@ use crate::stats::Stats;
 use crate::strings::StringTable;
 
 use colored::*;
-use failure::Error;
+use failure::{format_err, Error};
 use flatdata::{ArchiveBuilder, FileResourceStorage};
 use itertools::Itertools;
+use log::info;
 use pbr::ProgressBar;
 use structopt::StructOpt;
 
@@ -318,8 +313,8 @@ fn serialize_relations(
             // TODO: Serialized infos
 
             debug_assert!(
-                pbf_relation.roles_sid.len() == pbf_relation.memids.len() &&
-                pbf_relation.memids.len() == pbf_relation.types.len()
+                pbf_relation.roles_sid.len() == pbf_relation.memids.len()
+                    && pbf_relation.memids.len() == pbf_relation.types.len(),
                 "invalid input data"
             );
 

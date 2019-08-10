@@ -1,5 +1,6 @@
 #![allow(dead_code)]
+#![allow(clippy::all)]
 
-include!("osmflat.rs.generated");
+include!("osmflat_generated.rs");
 
 pub use osm::*;

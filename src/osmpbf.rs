@@ -1,14 +1,13 @@
 use byteorder::{ByteOrder, NetworkEndian};
 use flate2::read::ZlibDecoder;
+use log::info;
 use prost::{self, Message};
+use rayon::prelude::*;
 
 use std::fs::File;
 use std::io::{self, BufReader, Cursor, ErrorKind, Read, Seek, SeekFrom};
 use std::path::Path;
-
 use std::sync::Mutex;
-
-use rayon::prelude::*;
 
 include!(concat!(env!("OUT_DIR"), "/osmpbf.rs"));
 
