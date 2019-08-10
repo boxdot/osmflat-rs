@@ -512,6 +512,13 @@ fn run() -> Result<(), Error> {
         .init()
         .unwrap();
 
+    if !args.input.exists() {
+        return Err(format_err!(
+            "Input PBF at {} does not exist",
+            args.input.display()
+        ));
+    }
+
     let storage = FileResourceStorage::new(args.output.clone());
     let builder = osmflat::OsmBuilder::new(storage)?;
 

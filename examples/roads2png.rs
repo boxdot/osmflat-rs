@@ -1,6 +1,7 @@
+use osmflat::{Archive, FileResourceStorage, Osm};
+
 use bresenham::Bresenham;
 use itertools::Itertools;
-use osmflat::*;
 use structopt::StructOpt;
 
 use std::f64::consts::PI;
