@@ -1,11 +1,12 @@
 use byteorder::{ByteOrder, NetworkEndian};
 use flate2::read::ZlibDecoder;
 use log::info;
+use memmap::Mmap;
 use prost::{self, Message};
 use rayon::prelude::*;
 
 use std::fs::File;
-use std::io::{self, BufReader, Cursor, ErrorKind, Read, Seek, SeekFrom};
+use std::io::{self, Cursor, Read, Seek};
 use std::path::Path;
 use std::sync::Mutex;
 
@@ -82,10 +83,8 @@ pub struct BlockIndex {
 }
 
 struct BlockIndexIterator {
-    reader: BufReader<File>,
+    data: Mmap,
     cursor: usize,
-    file_buf: Vec<u8>,
-    is_open: bool,
 }
 
 enum BlobInfo {
@@ -96,33 +95,28 @@ enum BlobInfo {
 impl BlockIndexIterator {
     fn new<P: AsRef<Path>>(path: P) -> io::Result<Self> {
         let file = File::open(path)?;
-        Ok(Self {
-            reader: BufReader::new(file),
-            cursor: 0,
-            file_buf: Vec::new(),
-            is_open: true,
-        })
+        let data = unsafe { Mmap::map(&file)? };
+        Ok(Self { data, cursor: 0 })
+    }
+
+    fn read(&mut self, len: usize) -> &[u8] {
+        let data = &self.data[self.cursor..self.cursor + len];
+        self.cursor += len;
+        data
     }
 
     fn next_blob(&mut self) -> Result<BlobInfo, io::Error> {
         // read size of blob header
-        self.cursor += 4;
-        self.file_buf.resize(4, 0);
-        self.reader.read_exact(&mut self.file_buf)?;
-        let blob_header_len: i32 = NetworkEndian::read_i32(&self.file_buf);
+        let blob_header_len: i32 = NetworkEndian::read_i32(self.read(4));
 
         // read blob header
-        self.cursor += blob_header_len as usize;
-        self.file_buf.resize(blob_header_len as usize, 0);
-        self.reader.read_exact(&mut self.file_buf)?;
-        let blob_header = BlobHeader::decode(&self.file_buf)?;
+        let blob_header = BlobHeader::decode(self.read(blob_header_len as usize))?;
 
         let blob_start = self.cursor;
         let blob_len = blob_header.datasize as usize;
-        self.cursor += blob_len;
 
         if blob_header.r#type == "OSMHeader" {
-            self.reader.seek(SeekFrom::Current(blob_len as i64))?;
+            self.cursor += blob_len;
             Ok(BlobInfo::Header(BlockIndex {
                 block_type: BlockType::Header,
                 blob_start,
@@ -130,10 +124,11 @@ impl BlockIndexIterator {
             }))
         } else if blob_header.r#type == "OSMData" {
             // read blob
-            let mut result = Vec::new();
-            result.resize(blob_header.datasize as usize, 0);
-            self.reader.read_exact(&mut result)?;
-            Ok(BlobInfo::Unknown(blob_start, blob_len, result))
+            Ok(BlobInfo::Unknown(
+                blob_start,
+                blob_len,
+                self.read(blob_header.datasize as usize).to_vec(),
+            ))
         } else {
             panic!("unknown blob type");
         }
@@ -143,18 +138,8 @@ impl BlockIndexIterator {
 impl Iterator for BlockIndexIterator {
     type Item = Result<BlobInfo, io::Error>;
     fn next(&mut self) -> Option<Self::Item> {
-        if self.is_open {
-            let next = self.next_blob();
-            if let Err(e) = next {
-                if e.kind() == ErrorKind::UnexpectedEof {
-                    self.is_open = false;
-                    None
-                } else {
-                    Some(Err(e))
-                }
-            } else {
-                Some(next)
-            }
+        if self.cursor < self.data.len() {
+            Some(self.next_blob())
         } else {
             None
         }
