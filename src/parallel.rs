@@ -19,7 +19,7 @@ where
     let iter = Arc::new(Mutex::new(iter.enumerate()));
     let next = Arc::new((Mutex::new(0_usize), Condvar::new()));
     let (sender, receiver) = sync_channel(rayon::current_num_threads());
-    for _ in 1..rayon::current_num_threads() {
+    for _ in 0..rayon::current_num_threads() {
         let mut context = create_thread_context()?;
         let iter = iter.clone();
         let next = next.clone();

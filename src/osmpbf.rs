@@ -1,13 +1,10 @@
 use byteorder::{ByteOrder, NetworkEndian};
 use flate2::read::ZlibDecoder;
 use log::info;
-use memmap::Mmap;
 use prost::{self, Message};
 use rayon::prelude::*;
 
-use std::fs::File;
-use std::io::{self, Cursor, Read, Seek};
-use std::path::Path;
+use std::io::{self, Cursor, Read};
 use std::sync::Mutex;
 
 include!(concat!(env!("OUT_DIR"), "/osmpbf.rs"));
@@ -82,8 +79,8 @@ pub struct BlockIndex {
     pub blob_len: usize,
 }
 
-struct BlockIndexIterator {
-    data: Mmap,
+struct BlockIndexIterator<'a> {
+    data: &'a [u8],
     cursor: usize,
 }
 
@@ -92,11 +89,9 @@ enum BlobInfo {
     Unknown(usize, usize, Vec<u8>),
 }
 
-impl BlockIndexIterator {
-    fn new<P: AsRef<Path>>(path: P) -> io::Result<Self> {
-        let file = File::open(path)?;
-        let data = unsafe { Mmap::map(&file)? };
-        Ok(Self { data, cursor: 0 })
+impl<'a> BlockIndexIterator<'a> {
+    fn new(data: &'a [u8]) -> Self {
+        Self { data, cursor: 0 }
     }
 
     fn read(&mut self, len: usize) -> &[u8] {
@@ -135,7 +130,7 @@ impl BlockIndexIterator {
     }
 }
 
-impl Iterator for BlockIndexIterator {
+impl<'a> Iterator for BlockIndexIterator<'a> {
     type Item = Result<BlobInfo, io::Error>;
     fn next(&mut self) -> Option<Self::Item> {
         if self.cursor < self.data.len() {
@@ -146,24 +141,17 @@ impl Iterator for BlockIndexIterator {
     }
 }
 
-pub fn read_block<F: Read + Seek, T: prost::Message + Default>(
-    reader: &mut F,
+pub fn read_block<T: prost::Message + Default>(
+    data: &[u8],
     idx: &BlockIndex,
 ) -> Result<T, io::Error> {
-    reader.seek(io::SeekFrom::Start(idx.blob_start as u64))?;
-
-    // TODO: allocate buffers outside of the function
-    let mut buf = Vec::new();
-    buf.resize(idx.blob_len, 0);
-    reader.read_exact(&mut buf)?;
-    let blob = Blob::decode(&buf)?;
+    let blob = Blob::decode(&data[idx.blob_start..idx.blob_start + idx.blob_len])?;
 
     let mut blob_buf = Vec::new();
     let blob_data = if blob.raw.is_some() {
         blob.raw.as_ref().unwrap()
     } else if blob.zlib_data.is_some() {
         // decompress zlib data
-        blob_buf.clear();
         let data: &Vec<u8> = blob.zlib_data.as_ref().unwrap();
         let mut decoder = ZlibDecoder::new(&data[..]);
         decoder.read_to_end(&mut blob_buf)?;
@@ -210,8 +198,8 @@ fn blob_type_from_blob_info(
     })
 }
 
-pub fn build_block_index<P: AsRef<Path>>(path: P) -> io::Result<Vec<BlockIndex>> {
-    let iter = Mutex::new(BlockIndexIterator::new(path)?);
+pub fn build_block_index(pbf_data: &[u8]) -> io::Result<Vec<BlockIndex>> {
+    let iter = Mutex::new(BlockIndexIterator::new(pbf_data));
     let result = Mutex::new(Vec::new());
     let num_tasks = rayon::current_num_threads();
     info!(
@@ -219,7 +207,7 @@ pub fn build_block_index<P: AsRef<Path>>(path: P) -> io::Result<Vec<BlockIndex>>
         num_tasks
     );
     rayon::scope(|s| {
-        for _ in 1..num_tasks {
+        for _ in 0..num_tasks {
             s.spawn(|_| {
                 let mut local_result = Vec::new();
                 let mut blob_buf = Vec::new();
