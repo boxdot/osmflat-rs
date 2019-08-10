@@ -530,7 +530,7 @@ fn run() -> Result<(), Error> {
     );
 
     info!("Building index of PBF blocks...");
-    let block_index = build_block_index(&input_data)?;
+    let block_index = build_block_index(&input_data);
 
     // TODO: move out into a function
     let groups = block_index.into_iter().group_by(|b| b.block_type);
