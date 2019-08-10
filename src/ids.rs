@@ -20,7 +20,7 @@ pub struct IdTableBuilder {
 fn pack_index(x: (u32, u64)) -> u64 {
     assert!(x.0 < (1_u32 << 24));
     assert!(x.1 < (1_u64 << 40));
-    x.1 | ((x.0 as u64) << 40)
+    x.1 | (u64::from(x.0) << 40)
 }
 
 fn unpack_packed_index(x: u64) -> (u32, u64) {
@@ -38,7 +38,7 @@ impl IdTableBuilder {
         if self.data.len() <= id_set {
             self.data.resize(id_set + 1, Vec::new());
         }
-        self.data[id_set].push(pack_index(((x % (1u64 << 24)) as u32, self.next_id.into())));
+        self.data[id_set].push(pack_index(((x % (1u64 << 24)) as u32, self.next_id)));
         let result = self.next_id;
         self.next_id += 1;
         result

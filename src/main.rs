@@ -1,16 +1,5 @@
 #[macro_use]
-extern crate failure;
-#[macro_use]
 extern crate flatdata;
-#[macro_use]
-extern crate log;
-#[macro_use]
-extern crate prost_derive;
-#[cfg(test)]
-#[macro_use]
-extern crate proptest;
-#[macro_use]
-extern crate structopt;
 
 mod args;
 mod ids;
@@ -25,9 +14,10 @@ use crate::stats::Stats;
 use crate::strings::StringTable;
 
 use colored::*;
-use failure::Error;
+use failure::{format_err, Error};
 use flatdata::{ArchiveBuilder, FileResourceStorage};
 use itertools::Itertools;
+use log::info;
 use pbr::ProgressBar;
 use structopt::StructOpt;
 
@@ -84,7 +74,7 @@ fn serialize_header(
         header.set_osmosis_replication_base_url_idx(stringtable.push(url.clone()));
     }
 
-    builder.set_header(header.into_ref())?;
+    builder.set_header(header_buf.get())?;
     Ok(())
 }
 
@@ -292,7 +282,7 @@ fn serialize_relations(
     relations_id_to_idx: &ids::IdTable,
     stringtable: &mut StringTable,
     relations: &mut flatdata::ExternalVector<osmflat::Relation>,
-    relation_members: &mut flatdata::MultiVector<osmflat::IndexType40, osmflat::RelationMembers>,
+    relation_members: &mut flatdata::MultiVector<osmflat::RelationMembers>,
     tags: &mut TagSerializer,
 ) -> Result<Stats, Error> {
     let mut stats = Stats::default();
@@ -318,8 +308,8 @@ fn serialize_relations(
             // TODO: Serialized infos
 
             debug_assert!(
-                pbf_relation.roles_sid.len() == pbf_relation.memids.len() &&
-                pbf_relation.memids.len() == pbf_relation.types.len()
+                pbf_relation.roles_sid.len() == pbf_relation.memids.len()
+                    && pbf_relation.memids.len() == pbf_relation.types.len(),
                 "invalid input data"
             );
 
@@ -521,6 +511,13 @@ fn run() -> Result<(), Error> {
         .verbosity(args.verbose as usize + 2)
         .init()
         .unwrap();
+
+    if !args.input.exists() {
+        return Err(format_err!(
+            "Input PBF at {} does not exist",
+            args.input.display()
+        ));
+    }
 
     let storage = FileResourceStorage::new(args.output.clone());
     let builder = osmflat::OsmBuilder::new(storage)?;

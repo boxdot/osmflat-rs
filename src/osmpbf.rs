@@ -1,14 +1,13 @@
 use byteorder::{ByteOrder, NetworkEndian};
 use flate2::read::ZlibDecoder;
+use log::info;
 use prost::{self, Message};
+use rayon::prelude::*;
 
 use std::fs::File;
 use std::io::{self, BufReader, Cursor, ErrorKind, Read, Seek, SeekFrom};
 use std::path::Path;
-
 use std::sync::Mutex;
-
-use rayon::prelude::*;
 
 include!(concat!(env!("OUT_DIR"), "/osmpbf.rs"));
 
@@ -122,14 +121,14 @@ impl BlockIndexIterator {
         let blob_len = blob_header.datasize as usize;
         self.cursor += blob_len;
 
-        if blob_header.type_ == "OSMHeader" {
+        if blob_header.r#type == "OSMHeader" {
             self.reader.seek(SeekFrom::Current(blob_len as i64))?;
             Ok(BlobInfo::Header(BlockIndex {
                 block_type: BlockType::Header,
                 blob_start,
                 blob_len,
             }))
-        } else if blob_header.type_ == "OSMData" {
+        } else if blob_header.r#type == "OSMData" {
             // read blob
             let mut result = Vec::new();
             result.resize(blob_header.datasize as usize, 0);

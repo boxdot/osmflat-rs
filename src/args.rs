@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+use structopt::StructOpt;
 
 /// Compiler of Open Street Data from osm.pbf format to osm.flatdata format
 #[derive(Debug, StructOpt)]
