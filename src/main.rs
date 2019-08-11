@@ -26,6 +26,7 @@ use std::collections::{hash_map, HashMap};
 use std::fs::File;
 use std::io;
 use std::str;
+use std::sync::Arc;
 
 fn serialize_header(
     header_block: &osmpbf::HeaderBlock,
@@ -247,21 +248,17 @@ fn serialize_ways(
     Ok(stats)
 }
 
-fn build_relations_index<I, OpenFile>(
-    open_file: OpenFile,
-    block_index: I,
-) -> Result<ids::IdTable, Error>
+fn build_relations_index<I>(data: Arc<Mmap>, block_index: I) -> Result<ids::IdTable, Error>
 where
     I: ExactSizeIterator<Item = BlockIndex> + Send + 'static,
-    OpenFile: Fn() -> Result<Mmap, Error>,
 {
     let mut result = ids::IdTableBuilder::new();
     let mut pb = ProgressBar::new(block_index.len() as u64);
     pb.message("Building relations index...");
     parallel::parallel_process(
         block_index,
-        open_file,
-        |mut file, idx| read_block(&mut file, &idx),
+        data,
+        |data, idx| read_block(&data, &idx),
         |data: Result<osmpbf::PrimitiveBlock, io::Error>| -> Result<(), Error> {
             for group in &data?.primitivegroup {
                 for relation in &group.relations {
@@ -361,25 +358,22 @@ fn serialize_relations(
     Ok(stats)
 }
 
-fn serialize_dense_node_blocks<OpenFile>(
+fn serialize_dense_node_blocks(
     builder: &osmflat::OsmBuilder,
     blocks: Vec<BlockIndex>,
-    open_file: OpenFile,
+    data: Arc<Mmap>,
     tags: &mut TagSerializer,
     stringtable: &mut StringTable,
     stats: &mut Stats,
-) -> Result<ids::IdTable, Error>
-where
-    OpenFile: Fn() -> Result<Mmap, Error>,
-{
+) -> Result<ids::IdTable, Error> {
     let mut nodes_id_to_idx = ids::IdTableBuilder::new();
     let mut nodes = builder.start_nodes()?;
     let mut pb = ProgressBar::new(blocks.len() as u64);
     pb.message("Converting dense nodes...");
     parallel::parallel_process(
         blocks.into_iter(),
-        open_file,
-        |file, idx| read_block(&file, &idx),
+        data,
+        |data, idx| read_block(&data, &idx),
         |data| -> Result<(), Error> {
             *stats +=
                 serialize_dense_nodes(&data?, &mut nodes, &mut nodes_id_to_idx, stringtable, tags)?;
@@ -398,18 +392,15 @@ where
     Ok(nodes_id_to_idx)
 }
 
-fn serialize_way_blocks<OpenFile>(
+fn serialize_way_blocks(
     builder: &osmflat::OsmBuilder,
     blocks: Vec<BlockIndex>,
-    open_file: OpenFile,
+    data: Arc<Mmap>,
     nodes_id_to_idx: &ids::IdTable,
     tags: &mut TagSerializer,
     stringtable: &mut StringTable,
     stats: &mut Stats,
-) -> Result<ids::IdTable, Error>
-where
-    OpenFile: Fn() -> Result<Mmap, Error>,
-{
+) -> Result<ids::IdTable, Error> {
     let mut ways_id_to_idx = ids::IdTableBuilder::new();
     let mut ways = builder.start_ways()?;
     let mut pb = ProgressBar::new(blocks.len() as u64);
@@ -417,8 +408,8 @@ where
     pb.message("Converting ways...");
     parallel::parallel_process(
         blocks.into_iter(),
-        open_file,
-        |mut file, idx| read_block(&mut file, &idx),
+        data,
+        |data, idx| read_block(&data, &idx),
         |data| -> Result<(), Error> {
             *stats += serialize_ways(
                 &data?,
@@ -449,22 +440,19 @@ where
     Ok(ways_id_to_idx)
 }
 
-fn serialize_relation_blocks<OpenFile>(
+fn serialize_relation_blocks(
     builder: &osmflat::OsmBuilder,
     blocks: Vec<BlockIndex>,
-    open_file: OpenFile,
+    data: Arc<Mmap>,
     nodes_id_to_idx: &ids::IdTable,
     ways_id_to_idx: &ids::IdTable,
     tags: &mut TagSerializer,
     stringtable: &mut StringTable,
     stats: &mut Stats,
-) -> Result<(), Error>
-where
-    OpenFile: Fn() -> Result<Mmap, Error> + Copy,
-{
+) -> Result<(), Error> {
     // We need to build the index of relation ids first, since relations can refer
     // again to relations.
-    let relations_id_to_idx = build_relations_index(open_file, blocks.clone().into_iter())?;
+    let relations_id_to_idx = build_relations_index(data.clone(), blocks.clone().into_iter())?;
 
     let mut relations = builder.start_relations()?;
     let mut relation_members = builder.start_relation_members()?;
@@ -473,8 +461,8 @@ where
     pb.message("Converting relations...");
     parallel::parallel_process(
         blocks.into_iter(),
-        open_file,
-        |mut file, idx| read_block(&mut file, &idx),
+        data,
+        |data, idx| read_block(&data, &idx),
         |data| -> Result<(), Error> {
             *stats += serialize_relations(
                 &data?,
@@ -515,6 +503,7 @@ fn run() -> Result<(), Error> {
 
     let input_file = File::open(&args.input)?;
     let input_data = unsafe { Mmap::map(&input_file)? };
+    let input_data = Arc::new(input_data);
 
     let storage = FileResourceStorage::new(args.output.clone());
     let builder = osmflat::OsmBuilder::new(storage)?;
@@ -562,16 +551,11 @@ fn run() -> Result<(), Error> {
     info!("Header written.");
 
     let mut stats = Stats::default();
-    let open_input_file = || -> Result<Mmap, Error> {
-        let file = File::open(&args.input)?;
-        let data = unsafe { Mmap::map(&file)? };
-        Ok(data)
-    };
 
     let nodes_id_to_idx = serialize_dense_node_blocks(
         &builder,
         pbf_dense_nodes,
-        open_input_file,
+        input_data.clone(),
         &mut tags,
         &mut stringtable,
         &mut stats,
@@ -580,7 +564,7 @@ fn run() -> Result<(), Error> {
     let ways_id_to_idx = serialize_way_blocks(
         &builder,
         pbf_ways,
-        open_input_file,
+        input_data.clone(),
         &nodes_id_to_idx,
         &mut tags,
         &mut stringtable,
@@ -590,7 +574,7 @@ fn run() -> Result<(), Error> {
     serialize_relation_blocks(
         &builder,
         pbf_relations,
-        open_input_file,
+        input_data.clone(),
         &nodes_id_to_idx,
         &ways_id_to_idx,
         &mut tags,

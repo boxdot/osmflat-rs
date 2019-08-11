@@ -5,7 +5,6 @@ use prost::{self, Message};
 use rayon::prelude::*;
 
 use std::io::{self, Cursor, Read};
-use std::sync::Mutex;
 
 include!(concat!(env!("OUT_DIR"), "/osmpbf.rs"));
 
