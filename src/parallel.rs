@@ -1,50 +1,48 @@
 use std::sync::{mpsc::sync_channel, Arc, Condvar, Mutex};
 
-// allows producing data in parallel while still consuming it in the main thread
-// in order
-pub fn parallel_process<Iter, Item, Context, Consumer, Data, Error, Producer>(
+pub fn parallel_process<Iter, Item, Producer, Data, Consumer, Error>(
     iter: Iter,
-    context: Context,
     produce: Producer,
     mut consume: Consumer,
 ) -> Result<(), Error>
 where
-    Iter: ExactSizeIterator<Item = Item> + Send + 'static,
-    Context: Clone + Send + 'static,
-    Data: Send + 'static,
-    Producer: Fn(&Context, Item) -> Data + Clone + Send + 'static,
+    Iter: Iterator<Item = Item> + Send,
+    Producer: Fn(Item) -> Data + Sync,
+    Data: Send,
     Consumer: FnMut(Data) -> Result<(), Error>,
 {
     let iter = Arc::new(Mutex::new(iter.enumerate()));
     let next = Arc::new((Mutex::new(0_usize), Condvar::new()));
-    let (sender, receiver) = sync_channel(rayon::current_num_threads());
-    for _ in 0..rayon::current_num_threads() {
-        let context = context.clone();
-        let iter = iter.clone();
-        let next = next.clone();
-        let sender = sender.clone();
-        let produce = produce.clone();
-        rayon::spawn(move || loop {
-            let idx = iter.lock().unwrap().next();
-            let idx = match idx {
-                Some(x) => x,
-                None => break,
-            };
 
-            let result = produce(&context, idx.1);
+    crossbeam::scope(|s| {
+        let (sender, receiver) = sync_channel(rayon::current_num_threads());
+        for _ in 0..rayon::current_num_threads() {
+            let sender = sender.clone();
+            let iter = iter.clone();
+            s.spawn(|_| {
+                let sender = sender;
+                let iter = iter;
+                while let Some((i, item)) = iter.lock().unwrap().next() {
+                    let data = produce(item);
 
-            let mut guard = next.0.lock().unwrap();
-            while *guard != idx.0 {
-                guard = next.1.wait(guard).unwrap();
-            }
-            sender.send(result).unwrap();
-            *guard += 1;
-            next.1.notify_all();
-        });
-    }
-    drop(sender); // drop to make sure iteration will finish once all senders are out of scope
-    for result in receiver {
-        consume(result)?;
-    }
-    Ok(())
+                    let (counter, cond) = &*next;
+                    let mut guard = counter.lock().unwrap();
+                    while *guard != i {
+                        guard = cond.wait(guard).unwrap();
+                    }
+
+                    sender.send(data).unwrap();
+
+                    *guard += 1;
+                    cond.notify_all();
+                }
+            });
+        }
+        drop(sender); // drop to make sure iteration will finish once all senders are out of scope
+        for result in receiver {
+            consume(result)?;
+        }
+        Ok(())
+    })
+    .expect("thread panicked")
 }
