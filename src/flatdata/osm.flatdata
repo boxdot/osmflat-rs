@@ -25,15 +25,6 @@ struct Header {
     osmosis_replication_base_url_idx: u64 : 40;
 }
 
-struct Info {
-    version: i32 : 32;
-    timestamp: i64 : 64;
-    changest: i64 : 64;
-    uid: i32 : 32;
-    user_idx: u64 : 40;
-    visible: bool : 1;
-}
-
 struct Tag {
     key_idx: u64 : 40;
     value_idx: u64 : 40;
@@ -45,7 +36,6 @@ struct Node {
     lon: i64 : 64;
     @range(tags)
     tag_first_idx: u64 : 40;
-    info_idx: u64 : 40;
 }
 
 /**
@@ -61,7 +51,6 @@ struct Way {
     tag_first_idx: u64 : 40;
     @range(refs)
     ref_first_idx: u64 : 40;
-    info_idx: u64 : 40;
 }
 
 /**
@@ -90,7 +79,6 @@ struct Relation {
     id: i64 : 64;
     @range(tags)
     tag_first_idx: u64 : 40;
-    info_idx: u64 : 40;
 }
 
 @bound_implicitly(Relations: relations, relation_members)
@@ -103,16 +91,13 @@ archive Osm {
     header: Header;
 
     @explicit_reference( Node.tag_first_idx, tags_index )
-    @explicit_reference( Node.info_idx, infos )
     nodes: vector<Node>;
 
     @explicit_reference( Way.tag_first_idx, tags_index )
-    @explicit_reference( Way.info_idx, infos )
     @explicit_reference( Way.ref_first_idx, nodes_index )
     ways: vector<Way>;
 
     @explicit_reference( Relation.tag_first_idx, tags_index )
-    @explicit_reference( Relation.info_idx, infos )
     relations: vector<Relation>;
 
     @explicit_reference( NodeMember.node_idx, nodes )
@@ -126,9 +111,6 @@ archive Osm {
     @explicit_reference( Tag.key_idx, stringtable )
     @explicit_reference( Tag.value_idx, stringtable )
     tags: vector<Tag>;
-
-    @explicit_reference( Info.user_idx, stringtable )
-    infos: vector<Info>;
 
     @explicit_reference( TagIndex.value, tags )
     tags_index: vector<TagIndex>;

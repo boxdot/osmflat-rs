@@ -45,22 +45,22 @@ fn serialize_header(
     header.set_required_feature_first_idx(stringtable.next_index());
     header.set_required_features_size(header_block.required_features.len() as u32);
     for feature in &header_block.required_features {
-        stringtable.push(feature.clone());
+        stringtable.insert(feature);
     }
 
     header.set_optional_feature_first_idx(stringtable.next_index());
     header.set_optional_features_size(header_block.optional_features.len() as u32);
     for feature in &header_block.optional_features {
-        stringtable.push(feature.clone());
+        stringtable.insert(feature);
     }
 
     if let Some(ref writingprogram) = header_block.writingprogram {
         // TODO: Should we also add our name here?
-        header.set_writingprogram_idx(stringtable.push(writingprogram.clone()));
+        header.set_writingprogram_idx(stringtable.insert(writingprogram));
     }
 
     if let Some(ref source) = header_block.source {
-        header.set_source_idx(stringtable.push(source.clone()));
+        header.set_source_idx(stringtable.insert(source));
     }
 
     if let Some(timestamp) = header_block.osmosis_replication_timestamp {
@@ -72,7 +72,7 @@ fn serialize_header(
     }
 
     if let Some(ref url) = header_block.osmosis_replication_base_url {
-        header.set_osmosis_replication_base_url_idx(stringtable.push(url.clone()));
+        header.set_osmosis_replication_base_url_idx(stringtable.insert(url));
     }
 
     builder.set_header(header_buf.get())?;
@@ -134,7 +134,7 @@ fn add_string_table(
     pbf_stringtable: &osmpbf::StringTable,
     stringtable: &mut StringTable,
 ) -> Result<Vec<u64>, Error> {
-    let mut result = Vec::new();
+    let mut result = Vec::with_capacity(pbf_stringtable.s.len());
     for x in &pbf_stringtable.s {
         let string = str::from_utf8(&x)?;
         result.push(stringtable.insert(string));
@@ -200,9 +200,31 @@ fn serialize_dense_nodes(
     Ok(stats)
 }
 
-fn serialize_ways(
+fn resolve_ways(
     block: &osmpbf::PrimitiveBlock,
     nodes_id_to_idx: &ids::IdTable,
+) -> (Vec<u64>, Stats) {
+    let mut result = Vec::new();
+    let mut stats = Stats::default();
+    for group in &block.primitivegroup {
+        for pbf_way in &group.ways {
+            let mut node_ref = 0;
+            for delta in &pbf_way.refs {
+                node_ref += delta;
+                let idx = nodes_id_to_idx.get(node_ref as u64).unwrap_or_else(|| {
+                    stats.num_unresolved_node_ids += 1;
+                    osmflat::INVALID_IDX
+                });
+                result.push(idx);
+            }
+        }
+    }
+    (result, stats)
+}
+
+fn serialize_ways(
+    block: &osmpbf::PrimitiveBlock,
+    nodes_id_to_idx: &Vec<u64>,
     ways: &mut flatdata::ExternalVector<osmflat::Way>,
     ways_id_to_idx: &mut ids::IdTableBuilder,
     stringtable: &mut StringTable,
@@ -211,6 +233,7 @@ fn serialize_ways(
 ) -> Result<Stats, Error> {
     let mut stats = Stats::default();
     let string_refs = add_string_table(&block.stringtable, stringtable)?;
+    let mut nodes_idx = nodes_id_to_idx.iter().cloned();
     for group in &block.primitivegroup {
         for pbf_way in &group.ways {
             let index = ways_id_to_idx.insert(pbf_way.id as u64);
@@ -229,17 +252,9 @@ fn serialize_ways(
                 )?;
             }
 
-            // TODO: serialize info
-
             way.set_ref_first_idx(nodes_index.len() as u64);
-            let mut node_ref = 0;
-            for delta in &pbf_way.refs {
-                node_ref += delta;
-                let idx = nodes_id_to_idx.get(node_ref as u64).unwrap_or_else(|| {
-                    stats.num_unresolved_node_ids += 1;
-                    osmflat::INVALID_IDX
-                });
-                nodes_index.grow()?.set_value(idx);
+            for _ in &pbf_way.refs {
+                nodes_index.grow()?.set_value(nodes_idx.next().unwrap());
             }
         }
         stats.num_ways += group.ways.len();
@@ -300,8 +315,6 @@ fn serialize_relations(
                     string_refs[pbf_relation.vals[i] as usize],
                 )?;
             }
-
-            // TODO: Serialized infos
 
             debug_assert!(
                 pbf_relation.roles_sid.len() == pbf_relation.memids.len()
@@ -413,11 +426,17 @@ fn serialize_way_blocks(
     pb.message("Converting ways...");
     parallel::parallel_process(
         blocks.into_iter(),
-        |idx| read_block(&data, &idx),
-        |block| -> Result<(), Error> {
+        |idx| {
+            let block: osmpbf::PrimitiveBlock = read_block(&data, &idx)?;
+            let ids = resolve_ways(&block, nodes_id_to_idx);
+            Ok((block, ids))
+        },
+        |block: Result<(osmpbf::PrimitiveBlock, (Vec<u64>, Stats)), io::Error>| -> Result<(), Error> {
+            let (block, (ids, stats_resolve)) = block?;
+            *stats += stats_resolve;
             *stats += serialize_ways(
-                &block?,
-                &nodes_id_to_idx,
+                &block,
+                &ids,
                 &mut ways,
                 &mut ways_id_to_idx,
                 stringtable,
@@ -514,7 +533,7 @@ fn run() -> Result<(), Error> {
     // from time to time to disk.
     let mut stringtable = StringTable::new();
     let mut tags = TagSerializer::new(&builder)?;
-    let infos = builder.start_infos()?; // TODO: Actually put some data in here
+
     info!(
         "Initialized new osmflat archive at: {}",
         &args.output.display()
@@ -589,8 +608,6 @@ fn run() -> Result<(), Error> {
 
     info!("Writing stringtable to disk...");
     builder.set_stringtable(&stringtable.into_bytes())?;
-
-    infos.close()?;
 
     info!("osmflat archive built.");
 

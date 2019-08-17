@@ -23,19 +23,6 @@ struct Header
 }
 
 "#;
-pub const INFO: &str = r#"namespace osm {
-struct Info
-{
-    version : i32 : 32;
-    timestamp : i64 : 64;
-    changest : i64 : 64;
-    uid : i32 : 32;
-    user_idx : u64 : 40;
-    visible : bool : 1;
-}
-}
-
-"#;
 pub const TAG: &str = r#"namespace osm {
 struct Tag
 {
@@ -53,7 +40,6 @@ struct Node
     lon : i64 : 64;
     @range( tags )
     tag_first_idx : u64 : 40;
-    info_idx : u64 : 40;
 }
 }
 
@@ -74,7 +60,6 @@ struct Way
     tag_first_idx : u64 : 40;
     @range( refs )
     ref_first_idx : u64 : 40;
-    info_idx : u64 : 40;
 }
 }
 
@@ -120,7 +105,6 @@ struct Relation
     id : i64 : 64;
     @range( tags )
     tag_first_idx : u64 : 40;
-    info_idx : u64 : 40;
 }
 }
 
@@ -152,7 +136,6 @@ struct Node
     lon : i64 : 64;
     @range( tags )
     tag_first_idx : u64 : 40;
-    info_idx : u64 : 40;
 }
 }
 
@@ -164,7 +147,6 @@ struct Way
     tag_first_idx : u64 : 40;
     @range( refs )
     ref_first_idx : u64 : 40;
-    info_idx : u64 : 40;
 }
 }
 
@@ -174,7 +156,6 @@ struct Relation
     id : i64 : 64;
     @range( tags )
     tag_first_idx : u64 : 40;
-    info_idx : u64 : 40;
 }
 }
 
@@ -211,18 +192,6 @@ struct Tag
 }
 
 namespace osm {
-struct Info
-{
-    version : i32 : 32;
-    timestamp : i64 : 64;
-    changest : i64 : 64;
-    uid : i32 : 32;
-    user_idx : u64 : 40;
-    visible : bool : 1;
-}
-}
-
-namespace osm {
 struct TagIndex
 {
     value : u64 : 40;
@@ -255,14 +224,11 @@ archive Osm
     @explicit_reference( .osm.Header.osmosis_replication_base_url_idx, .osm.Osm.stringtable )
     header : .osm.Header;
     @explicit_reference( .osm.Node.tag_first_idx, .osm.Osm.tags_index )
-    @explicit_reference( .osm.Node.info_idx, .osm.Osm.infos )
     nodes : vector< .osm.Node >;
     @explicit_reference( .osm.Way.tag_first_idx, .osm.Osm.tags_index )
-    @explicit_reference( .osm.Way.info_idx, .osm.Osm.infos )
     @explicit_reference( .osm.Way.ref_first_idx, .osm.Osm.nodes_index )
     ways : vector< .osm.Way >;
     @explicit_reference( .osm.Relation.tag_first_idx, .osm.Osm.tags_index )
-    @explicit_reference( .osm.Relation.info_idx, .osm.Osm.infos )
     relations : vector< .osm.Relation >;
     @explicit_reference( .osm.NodeMember.node_idx, .osm.Osm.nodes )
     @explicit_reference( .osm.NodeMember.role_idx, .osm.Osm.stringtable )
@@ -274,8 +240,6 @@ archive Osm
     @explicit_reference( .osm.Tag.key_idx, .osm.Osm.stringtable )
     @explicit_reference( .osm.Tag.value_idx, .osm.Osm.stringtable )
     tags : vector< .osm.Tag >;
-    @explicit_reference( .osm.Info.user_idx, .osm.Osm.stringtable )
-    infos : vector< .osm.Info >;
     @explicit_reference( .osm.TagIndex.value, .osm.Osm.tags )
     tags_index : vector< .osm.TagIndex >;
     @explicit_reference( .osm.NodeIndex.value, .osm.Osm.nodes )
@@ -324,7 +288,6 @@ struct Node
     lon : i64 : 64;
     @range( tags )
     tag_first_idx : u64 : 40;
-    info_idx : u64 : 40;
 }
 }
 
@@ -332,7 +295,6 @@ namespace osm {
 archive Osm
 {
     @explicit_reference( .osm.Node.tag_first_idx, .osm.Osm.tags_index )
-    @explicit_reference( .osm.Node.info_idx, .osm.Osm.infos )
     nodes : vector< .osm.Node >;
 }
 }
@@ -345,7 +307,6 @@ struct Way
     tag_first_idx : u64 : 40;
     @range( refs )
     ref_first_idx : u64 : 40;
-    info_idx : u64 : 40;
 }
 }
 
@@ -353,7 +314,6 @@ namespace osm {
 archive Osm
 {
     @explicit_reference( .osm.Way.tag_first_idx, .osm.Osm.tags_index )
-    @explicit_reference( .osm.Way.info_idx, .osm.Osm.infos )
     @explicit_reference( .osm.Way.ref_first_idx, .osm.Osm.nodes_index )
     ways : vector< .osm.Way >;
 }
@@ -365,7 +325,6 @@ struct Relation
     id : i64 : 64;
     @range( tags )
     tag_first_idx : u64 : 40;
-    info_idx : u64 : 40;
 }
 }
 
@@ -373,7 +332,6 @@ namespace osm {
 archive Osm
 {
     @explicit_reference( .osm.Relation.tag_first_idx, .osm.Osm.tags_index )
-    @explicit_reference( .osm.Relation.info_idx, .osm.Osm.infos )
     relations : vector< .osm.Relation >;
 }
 }
@@ -429,26 +387,6 @@ archive Osm
     @explicit_reference( .osm.Tag.key_idx, .osm.Osm.stringtable )
     @explicit_reference( .osm.Tag.value_idx, .osm.Osm.stringtable )
     tags : vector< .osm.Tag >;
-}
-}
-
-"#;pub const INFOS: &str = r#"namespace osm {
-struct Info
-{
-    version : i32 : 32;
-    timestamp : i64 : 64;
-    changest : i64 : 64;
-    uid : i32 : 32;
-    user_idx : u64 : 40;
-    visible : bool : 1;
-}
-}
-
-namespace osm {
-archive Osm
-{
-    @explicit_reference( .osm.Info.user_idx, .osm.Osm.stringtable )
-    infos : vector< .osm.Info >;
 }
 }
 
@@ -521,20 +459,6 @@ define_struct!(
 
 
 define_struct!(
-    Info,
-    RefInfo,
-    RefMutInfo,
-    schema::structs::INFO,
-    30,
-    (version, set_version, i32, i32, 0, 32),
-    (timestamp, set_timestamp, i64, i64, 32, 64),
-    (changest, set_changest, i64, i64, 96, 64),
-    (uid, set_uid, i32, i32, 160, 32),
-    (user_idx, set_user_idx, u64, u64, 192, 40),
-    (visible, set_visible, bool, bool, 232, 1));
-
-
-define_struct!(
     Tag,
     RefTag,
     RefMutTag,
@@ -549,12 +473,11 @@ define_struct!(
     RefNode,
     RefMutNode,
     schema::structs::NODE,
-    34,
+    29,
     (id, set_id, i64, i64, 0, 64),
     (lat, set_lat, i64, i64, 64, 64),
     (lon, set_lon, i64, i64, 128, 64),
     (tag_first_idx, set_tag_first_idx, u64, u64, 192, 40),
-    (info_idx, set_info_idx, u64, u64, 232, 40),
     range(tags, u64, 192, 40)
 );
 
@@ -573,11 +496,10 @@ define_struct!(
     RefWay,
     RefMutWay,
     schema::structs::WAY,
-    23,
+    18,
     (id, set_id, i64, i64, 0, 64),
     (tag_first_idx, set_tag_first_idx, u64, u64, 64, 40),
     (ref_first_idx, set_ref_first_idx, u64, u64, 104, 40),
-    (info_idx, set_info_idx, u64, u64, 144, 40),
     range(tags, u64, 64, 40)
 ,
     range(refs, u64, 104, 40)
@@ -628,10 +550,9 @@ define_struct!(
     RefRelation,
     RefMutRelation,
     schema::structs::RELATION,
-    18,
+    13,
     (id, set_id, i64, i64, 0, 64),
     (tag_first_idx, set_tag_first_idx, u64, u64, 64, 40),
-    (info_idx, set_info_idx, u64, u64, 104, 40),
     range(tags, u64, 64, 40)
 );
 
@@ -651,7 +572,6 @@ define_archive!(Osm, OsmBuilder, schema::osm::OSM;
     vector(relations, false, schema::osm::resources::RELATIONS, set_relations, start_relations, super::osm::Relation),
     multivector(relation_members, false, schema::osm::resources::RELATION_MEMBERS, start_relation_members, RelationMembers, relation_members_index, super::_builtin::multivector::IndexType40),
     vector(tags, false, schema::osm::resources::TAGS, set_tags, start_tags, super::osm::Tag),
-    vector(infos, false, schema::osm::resources::INFOS, set_infos, start_infos, super::osm::Info),
     vector(tags_index, false, schema::osm::resources::TAGS_INDEX, set_tags_index, start_tags_index, super::osm::TagIndex),
     vector(nodes_index, false, schema::osm::resources::NODES_INDEX, set_nodes_index, start_nodes_index, super::osm::NodeIndex),
     raw_data(stringtable, false, schema::osm::resources::STRINGTABLE, set_stringtable),
@@ -681,5 +601,3 @@ define_index!(
 pub mod schema {
 pub mod structs {}}
 }
-
-pub use osm::*;
