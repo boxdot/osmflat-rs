@@ -1,8 +1,9 @@
+use inlinable_string::{InlinableString, StringExt};
 use std::collections::HashMap;
 
 #[derive(Debug, Default)]
 pub struct StringTable {
-    indexed_data: HashMap<String, u64>,
+    indexed_data: HashMap<InlinableString, u64>,
     size_in_bytes: u64,
 }
 
@@ -32,7 +33,7 @@ impl StringTable {
     }
 
     pub fn into_bytes(self) -> Vec<u8> {
-        let mut index: Vec<(&String, &u64)> = self.indexed_data.iter().collect();
+        let mut index: Vec<(&InlinableString, &u64)> = self.indexed_data.iter().collect();
         index.sort_by_key(|(_, &idx)| idx);
 
         let mut data = Vec::new();
