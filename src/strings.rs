@@ -22,6 +22,7 @@ impl StringTable {
     /// and the index to the previous string is returned.
     pub fn insert(&mut self, s: &str) -> u64 {
         // Horrible news, we cannot use entry API since it does not support Borrow
+        // See: https://github.com/rust-lang/rust/issues/56167
         if let Some(&idx) = self.indexed_data.get(s) {
             return idx;
         }
