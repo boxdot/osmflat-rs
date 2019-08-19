@@ -229,8 +229,6 @@ fn serialize_ways(
                 )?;
             }
 
-            // TODO: serialize info
-
             way.set_ref_first_idx(nodes_index.len() as u64);
             let mut node_ref = 0;
             for delta in &pbf_way.refs {
@@ -300,8 +298,6 @@ fn serialize_relations(
                     string_refs[pbf_relation.vals[i] as usize],
                 )?;
             }
-
-            // TODO: Serialized infos
 
             debug_assert!(
                 pbf_relation.roles_sid.len() == pbf_relation.memids.len()
@@ -514,7 +510,6 @@ fn run() -> Result<(), Error> {
     // from time to time to disk.
     let mut stringtable = StringTable::new();
     let mut tags = TagSerializer::new(&builder)?;
-    let infos = builder.start_infos()?; // TODO: Actually put some data in here
     info!(
         "Initialized new osmflat archive at: {}",
         &args.output.display()
@@ -589,8 +584,6 @@ fn run() -> Result<(), Error> {
 
     info!("Writing stringtable to disk...");
     builder.set_stringtable(&stringtable.into_bytes())?;
-
-    infos.close()?;
 
     info!("osmflat archive built.");
 
