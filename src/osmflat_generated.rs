@@ -6,10 +6,10 @@ pub mod structs {
 pub const HEADER: &str = r#"namespace osm {
 struct Header
 {
-    bbox_left : i64 : 64;
-    bbox_right : i64 : 64;
-    bbox_top : i64 : 64;
-    bbox_bottom : i64 : 64;
+    bbox_left : i64 : 40;
+    bbox_right : i64 : 40;
+    bbox_top : i64 : 40;
+    bbox_bottom : i64 : 40;
     required_feature_first_idx : u64 : 40;
     required_features_size : u32 : 4;
     optional_feature_first_idx : u64 : 40;
@@ -35,9 +35,9 @@ struct Tag
 pub const NODE: &str = r#"namespace osm {
 struct Node
 {
-    id : i64 : 64;
-    lat : i64 : 64;
-    lon : i64 : 64;
+    id : i64 : 40;
+    lat : i64 : 40;
+    lon : i64 : 40;
     @range( tags )
     tag_first_idx : u64 : 40;
 }
@@ -55,7 +55,7 @@ struct NodeIndex
 pub const WAY: &str = r#"namespace osm {
 struct Way
 {
-    id : i64 : 64;
+    id : i64 : 40;
     @range( tags )
     tag_first_idx : u64 : 40;
     @range( refs )
@@ -102,7 +102,7 @@ struct RelationMember
 pub const RELATION: &str = r#"namespace osm {
 struct Relation
 {
-    id : i64 : 64;
+    id : i64 : 40;
     @range( tags )
     tag_first_idx : u64 : 40;
 }
@@ -112,10 +112,10 @@ struct Relation
 pub const OSM: &str = r#"namespace osm {
 struct Header
 {
-    bbox_left : i64 : 64;
-    bbox_right : i64 : 64;
-    bbox_top : i64 : 64;
-    bbox_bottom : i64 : 64;
+    bbox_left : i64 : 40;
+    bbox_right : i64 : 40;
+    bbox_top : i64 : 40;
+    bbox_bottom : i64 : 40;
     required_feature_first_idx : u64 : 40;
     required_features_size : u32 : 4;
     optional_feature_first_idx : u64 : 40;
@@ -131,9 +131,9 @@ struct Header
 namespace osm {
 struct Node
 {
-    id : i64 : 64;
-    lat : i64 : 64;
-    lon : i64 : 64;
+    id : i64 : 40;
+    lat : i64 : 40;
+    lon : i64 : 40;
     @range( tags )
     tag_first_idx : u64 : 40;
 }
@@ -142,7 +142,7 @@ struct Node
 namespace osm {
 struct Way
 {
-    id : i64 : 64;
+    id : i64 : 40;
     @range( tags )
     tag_first_idx : u64 : 40;
     @range( refs )
@@ -153,7 +153,7 @@ struct Way
 namespace osm {
 struct Relation
 {
-    id : i64 : 64;
+    id : i64 : 40;
     @range( tags )
     tag_first_idx : u64 : 40;
 }
@@ -252,10 +252,10 @@ archive Osm
 pub mod resources {pub const HEADER: &str = r#"namespace osm {
 struct Header
 {
-    bbox_left : i64 : 64;
-    bbox_right : i64 : 64;
-    bbox_top : i64 : 64;
-    bbox_bottom : i64 : 64;
+    bbox_left : i64 : 40;
+    bbox_right : i64 : 40;
+    bbox_top : i64 : 40;
+    bbox_bottom : i64 : 40;
     required_feature_first_idx : u64 : 40;
     required_features_size : u32 : 4;
     optional_feature_first_idx : u64 : 40;
@@ -283,9 +283,9 @@ archive Osm
 "#;pub const NODES: &str = r#"namespace osm {
 struct Node
 {
-    id : i64 : 64;
-    lat : i64 : 64;
-    lon : i64 : 64;
+    id : i64 : 40;
+    lat : i64 : 40;
+    lon : i64 : 40;
     @range( tags )
     tag_first_idx : u64 : 40;
 }
@@ -302,7 +302,7 @@ archive Osm
 "#;pub const WAYS: &str = r#"namespace osm {
 struct Way
 {
-    id : i64 : 64;
+    id : i64 : 40;
     @range( tags )
     tag_first_idx : u64 : 40;
     @range( refs )
@@ -322,7 +322,7 @@ archive Osm
 "#;pub const RELATIONS: &str = r#"namespace osm {
 struct Relation
 {
-    id : i64 : 64;
+    id : i64 : 40;
     @range( tags )
     tag_first_idx : u64 : 40;
 }
@@ -442,20 +442,20 @@ define_struct!(
     RefHeader,
     RefMutHeader,
     schema::structs::HEADER,
-    74,
-    (bbox_left, set_bbox_left, i64, i64, 0, 64),
-    (bbox_right, set_bbox_right, i64, i64, 64, 64),
-    (bbox_top, set_bbox_top, i64, i64, 128, 64),
-    (bbox_bottom, set_bbox_bottom, i64, i64, 192, 64),
-    (required_feature_first_idx, set_required_feature_first_idx, u64, u64, 256, 40),
-    (required_features_size, set_required_features_size, u32, u32, 296, 4),
-    (optional_feature_first_idx, set_optional_feature_first_idx, u64, u64, 300, 40),
-    (optional_features_size, set_optional_features_size, u32, u32, 340, 4),
-    (writingprogram_idx, set_writingprogram_idx, u64, u64, 344, 40),
-    (source_idx, set_source_idx, u64, u64, 384, 40),
-    (osmosis_replication_timestamp, set_osmosis_replication_timestamp, i64, i64, 424, 64),
-    (osmosis_replication_sequence_number, set_osmosis_replication_sequence_number, i64, i64, 488, 64),
-    (osmosis_replication_base_url_idx, set_osmosis_replication_base_url_idx, u64, u64, 552, 40));
+    62,
+    (bbox_left, set_bbox_left, i64, i64, 0, 40),
+    (bbox_right, set_bbox_right, i64, i64, 40, 40),
+    (bbox_top, set_bbox_top, i64, i64, 80, 40),
+    (bbox_bottom, set_bbox_bottom, i64, i64, 120, 40),
+    (required_feature_first_idx, set_required_feature_first_idx, u64, u64, 160, 40),
+    (required_features_size, set_required_features_size, u32, u32, 200, 4),
+    (optional_feature_first_idx, set_optional_feature_first_idx, u64, u64, 204, 40),
+    (optional_features_size, set_optional_features_size, u32, u32, 244, 4),
+    (writingprogram_idx, set_writingprogram_idx, u64, u64, 248, 40),
+    (source_idx, set_source_idx, u64, u64, 288, 40),
+    (osmosis_replication_timestamp, set_osmosis_replication_timestamp, i64, i64, 328, 64),
+    (osmosis_replication_sequence_number, set_osmosis_replication_sequence_number, i64, i64, 392, 64),
+    (osmosis_replication_base_url_idx, set_osmosis_replication_base_url_idx, u64, u64, 456, 40));
 
 
 define_struct!(
@@ -473,12 +473,12 @@ define_struct!(
     RefNode,
     RefMutNode,
     schema::structs::NODE,
-    29,
-    (id, set_id, i64, i64, 0, 64),
-    (lat, set_lat, i64, i64, 64, 64),
-    (lon, set_lon, i64, i64, 128, 64),
-    (tag_first_idx, set_tag_first_idx, u64, u64, 192, 40),
-    range(tags, u64, 192, 40)
+    20,
+    (id, set_id, i64, i64, 0, 40),
+    (lat, set_lat, i64, i64, 40, 40),
+    (lon, set_lon, i64, i64, 80, 40),
+    (tag_first_idx, set_tag_first_idx, u64, u64, 120, 40),
+    range(tags, u64, 120, 40)
 );
 
 /// A struct indexing a node.
@@ -496,13 +496,13 @@ define_struct!(
     RefWay,
     RefMutWay,
     schema::structs::WAY,
-    18,
-    (id, set_id, i64, i64, 0, 64),
-    (tag_first_idx, set_tag_first_idx, u64, u64, 64, 40),
-    (ref_first_idx, set_ref_first_idx, u64, u64, 104, 40),
-    range(tags, u64, 64, 40)
+    15,
+    (id, set_id, i64, i64, 0, 40),
+    (tag_first_idx, set_tag_first_idx, u64, u64, 40, 40),
+    (ref_first_idx, set_ref_first_idx, u64, u64, 80, 40),
+    range(tags, u64, 40, 40)
 ,
-    range(refs, u64, 104, 40)
+    range(refs, u64, 80, 40)
 );
 
 /// A struct indexing a tag.
@@ -550,10 +550,10 @@ define_struct!(
     RefRelation,
     RefMutRelation,
     schema::structs::RELATION,
-    13,
-    (id, set_id, i64, i64, 0, 64),
-    (tag_first_idx, set_tag_first_idx, u64, u64, 64, 40),
-    range(tags, u64, 64, 40)
+    10,
+    (id, set_id, i64, i64, 0, 40),
+    (tag_first_idx, set_tag_first_idx, u64, u64, 40, 40),
+    range(tags, u64, 40, 40)
 );
 
 

@@ -7,10 +7,10 @@ const u64 INVALID_IDX = 0xFFFFFFFFFF;
 const u64 COORD_SCALE = 1000000000;
 
 struct Header {
-    bbox_left: i64 : 64;
-    bbox_right: i64 : 64;
-    bbox_top: i64 : 64;
-    bbox_bottom: i64 : 64;
+    bbox_left: i64 : 40;
+    bbox_right: i64 : 40;
+    bbox_top: i64 : 40;
+    bbox_bottom: i64 : 40;
 
     required_feature_first_idx: u64 : 40;
     required_features_size: u32 : 4;
@@ -31,9 +31,9 @@ struct Tag {
 }
 
 struct Node {
-    id: i64 : 64;
-    lat: i64 : 64;
-    lon: i64 : 64;
+    id: i64 : 40;
+    lat: i64 : 40;
+    lon: i64 : 40;
     @range(tags)
     tag_first_idx: u64 : 40;
 }
@@ -46,7 +46,7 @@ struct NodeIndex {
 }
 
 struct Way {
-    id: i64 : 64;
+    id: i64 : 40;
     @range(tags)
     tag_first_idx: u64 : 40;
     @range(refs)
@@ -76,7 +76,7 @@ struct RelationMember {
 }
 
 struct Relation {
-    id: i64 : 64;
+    id: i64 : 40;
     @range(tags)
     tag_first_idx: u64 : 40;
 }
