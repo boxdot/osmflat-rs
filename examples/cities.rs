@@ -32,7 +32,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             };
             Some(City {
                 name: get_tag("name")?.into(),
-                population: get_tag("name")?.parse().ok()?,
+                population: get_tag("population")?.parse().ok()?,
             })
         })
         .collect();
