@@ -1,6 +1,8 @@
 use std::cmp::Reverse;
 use std::collections::BTreeMap;
-use std::sync::{mpsc::sync_channel, Arc, Condvar, Mutex};
+use std::sync::{mpsc::sync_channel, Arc};
+
+use parking_lot::{Condvar, Mutex};
 
 pub fn parallel_process<Iter, Item, Producer, Data, Consumer, Error>(
     iter: Iter,
@@ -16,10 +18,10 @@ where
     let num_threads = rayon::current_num_threads();
 
     let iter = Arc::new(Mutex::new(iter.enumerate()));
-    let next = Arc::new((Mutex::new(2 * num_threads), Condvar::new()));
+    let next = Arc::new((Mutex::new(20 * num_threads), Condvar::new()));
 
     crossbeam::scope(|s| {
-        let (sender, receiver) = sync_channel(2 * num_threads);
+        let (sender, receiver) = sync_channel(20 * num_threads);
         for _ in 0..num_threads {
             let sender = sender.clone();
             let iter = iter.clone();
@@ -27,16 +29,21 @@ where
                 let sender = sender;
                 let iter = iter;
                 loop {
-                    let (i, item) = match iter.lock().unwrap().next() {
-                        None => break,
-                        Some(x) => x,
+                    let (i, item) = {
+                        match iter.lock().next() {
+                            None => break,
+                            Some(x) => x,
+                        }
                     };
+
                     let data = produce(item);
 
                     let (counter, cond) = &*next;
-                    let mut guard = counter.lock().unwrap();
-                    while *guard <= i {
-                        guard = cond.wait(guard).unwrap();
+                    {
+                        let mut guard = counter.lock();
+                        while *guard <= i {
+                            cond.wait(&mut guard);
+                        }
                     }
 
                     sender.send((i, data)).unwrap();
@@ -51,7 +58,7 @@ where
             pending.insert(Reverse(result.0), result.1);
             while let Some(data) = pending.remove(&Reverse(next_idx)) {
                 {
-                    let mut guard = next.0.lock().unwrap();
+                    let mut guard = next.0.lock();
                     *guard += 1;
                     next.1.notify_all();
                 }
