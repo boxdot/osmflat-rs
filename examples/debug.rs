@@ -1,8 +1,9 @@
 //! Dump the contents of the input archive in a debug format.
 //!
 //! Demonstrates
-//! * iteration through all fundamental types.
-//! * accessing of fields and following of references.
+//!
+//! * iteration through all fundamental types
+//! * accessing of fields and following of references
 //!
 //! LICENSE
 //!
@@ -165,9 +166,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    let nodes_index = archive.nodes_index();
-
     // print ways
+    let nodes_index = archive.nodes_index();
     if types.contains('w') {
         for way in archive.ways() {
             let tags: Result<Vec<_>, _> = osmflat::tags(&archive, way.tags()).collect();
