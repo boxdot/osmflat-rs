@@ -29,14 +29,14 @@ impl Coords {
 
 fn haversine_distance(c1: Coords, c2: Coords) -> f64 {
     /// Earth's radius for WGS84 in meters
-    const EARTH_RADIUS_IN_METERS: f64 = 6372797.560856;
+    const EARTH_RADIUS_IN_METERS: f64 = 6_372_797.560_856;
 
     let mut lonh = ((c1.lon - c2.lon).to_radians() * 0.5).sin();
     lonh *= lonh;
     let mut lath = ((c1.lat - c2.lat).to_radians() * 0.5).sin();
     lath *= lath;
     let tmp = c1.lat.to_radians().cos() * c2.lat.to_radians().cos();
-    return 2.0 * EARTH_RADIUS_IN_METERS * (lath + tmp * lonh).sqrt().asin();
+    2.0 * EARTH_RADIUS_IN_METERS * (lath + tmp * lonh).sqrt().asin()
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {

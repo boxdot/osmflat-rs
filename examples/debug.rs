@@ -19,7 +19,7 @@ use std::str::Utf8Error;
 struct FixedI64(i64);
 
 impl FixedI64 {
-    fn value(&self) -> f64 {
+    fn value(self) -> f64 {
         self.0 as f64 / osmflat::COORD_SCALE as f64
     }
 }
@@ -117,7 +117,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "USAGE: debug <osmflat-archive> [TYPES] \
          TYPES can be any combination of 'n', 'w', 'r' (default: 'nwr').",
     )?;
-    let types = args.next().unwrap_or("nrw".to_string());
+    let types = args.next().unwrap_or_else(|| "nrw".to_string());
     let archive = Osm::open(FileResourceStorage::new(archive_dir))?;
 
     let header = archive.header();

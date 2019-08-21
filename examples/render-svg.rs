@@ -322,7 +322,7 @@ struct Args {
     height: u32,
 }
 
-fn main() -> Result<(), Box<std::error::Error>> {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::from_args();
 
     let storage = FileResourceStorage::new(args.osmflat_archive);
