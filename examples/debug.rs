@@ -11,7 +11,6 @@
 use osmflat::{Archive, FileResourceStorage, Osm, RefRelationMembers};
 
 use std::fmt;
-use std::ops::Range;
 use std::str::Utf8Error;
 
 /// Represents fixed point coordinates stored in OSM
@@ -87,50 +86,20 @@ struct Node<'ar> {
     id: i64,
     lat: FixedI64,
     lon: FixedI64,
-    tags: Vec<Tag<'ar>>,
-}
-
-#[derive(Debug)]
-struct Tag<'ar> {
-    key: &'ar str,
-    value: &'ar str,
-}
-
-impl<'ar> Tag<'ar> {
-    fn new(archive: &'ar Osm, idx: u64) -> Result<Self, Utf8Error> {
-        let strings = archive.stringtable();
-        let tag = archive.tags().at(idx as usize);
-        strings.substring(tag.key_idx() as usize).and_then(|key| {
-            Ok(Tag {
-                key,
-                value: strings.substring(tag.value_idx() as usize)?,
-            })
-        })
-    }
-
-    fn new_slice(
-        archive: &'ar osmflat::Osm,
-        range: Range<u64>,
-    ) -> impl Iterator<Item = Result<Tag<'ar>, Utf8Error>> + 'ar {
-        let tags_index = archive.tags_index();
-        range.map(move |idx| {
-            let idx = tags_index.at(idx as usize).value();
-            Self::new(&archive, idx)
-        })
-    }
+    tags: Vec<(&'ar str, &'ar str)>,
 }
 
 #[derive(Debug)]
 struct Way<'ar> {
     id: i64,
-    tags: Vec<Tag<'ar>>,
+    tags: Vec<(&'ar str, &'ar str)>,
     nodes: Vec<u64>,
 }
 
 #[derive(Debug)]
 struct Relation<'ar> {
     id: i64,
-    tags: Vec<Tag<'ar>>,
+    tags: Vec<(&'ar str, &'ar str)>,
     members: Vec<Member<'ar>>,
 }
 
@@ -193,7 +162,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     if types.contains('n') {
         for node in archive.nodes().slice(..3) {
-            let tags: Result<Vec<_>, _> = Tag::new_slice(&archive, node.tags()).collect();
+            let tags: Result<Vec<_>, _> = osmflat::tags(&archive, node.tags()).collect();
             let node = Node {
                 id: node.id(),
                 lat: FixedI64(node.lat()),
@@ -209,7 +178,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     if types.contains('w') {
         for way in archive.ways() {
-            let tags: Result<Vec<_>, _> = Tag::new_slice(&archive, way.tags()).collect();
+            let tags: Result<Vec<_>, _> = osmflat::tags(&archive, way.tags()).collect();
             let way = Way {
                 id: way.id(),
                 tags: tags?,
@@ -225,7 +194,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     if types.contains('r') {
         for (relation_idx, relation) in archive.relations().slice(..3).iter().enumerate() {
-            let tags: Result<Vec<_>, _> = Tag::new_slice(&archive, relation.tags()).collect();
+            let tags: Result<Vec<_>, _> = osmflat::tags(&archive, relation.tags()).collect();
             let members: Result<Vec<_>, _> = Member::new_slice(&archive, relation_idx).collect();
             let relation = Relation {
                 id: relation.id(),
