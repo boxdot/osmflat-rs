@@ -23,16 +23,10 @@ impl FixedI64 {
     }
 }
 
-impl fmt::Display for FixedI64 {
+impl fmt::Debug for FixedI64 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let value: f64 = self.value();
         write!(f, "{}", value)
-    }
-}
-
-impl fmt::Debug for FixedI64 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self)
     }
 }
 
@@ -46,39 +40,6 @@ struct Header<'ar> {
     osmosis_replication_timestamp: i64,
     osmosis_replication_sequence_number: i64,
     osmosis_replication_base_url: &'ar str,
-}
-
-impl<'ar> Header<'ar> {
-    fn new(archive: &'ar Osm) -> Result<Self, Utf8Error> {
-        let header = archive.header();
-        let strings = archive.stringtable();
-
-        let required_features: Result<Vec<_>, _> = (header.required_feature_first_idx() as usize..)
-            .take(header.required_features_size() as usize)
-            .map(|idx| strings.substring(idx))
-            .collect();
-        let optional_features: Result<Vec<_>, _> = (header.optional_feature_first_idx() as usize..)
-            .take(header.optional_features_size() as usize)
-            .map(|idx| strings.substring(idx))
-            .collect();
-
-        Ok(Self {
-            bbox: (
-                FixedI64(header.bbox_left()),
-                FixedI64(header.bbox_right()),
-                FixedI64(header.bbox_top()),
-                FixedI64(header.bbox_bottom()),
-            ),
-            required_features: required_features?,
-            optional_features: optional_features?,
-            writingprogram: strings.substring(header.writingprogram_idx() as usize)?,
-            source: strings.substring(header.source_idx() as usize)?,
-            osmosis_replication_timestamp: header.osmosis_replication_timestamp(),
-            osmosis_replication_sequence_number: header.osmosis_replication_sequence_number(),
-            osmosis_replication_base_url: strings
-                .substring(header.osmosis_replication_base_url_idx() as usize)?,
-        })
-    }
 }
 
 #[derive(Debug)]
@@ -158,8 +119,38 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let types = args.next().unwrap_or("nrw".to_string());
     let archive = Osm::open(FileResourceStorage::new(archive_dir))?;
 
-    println!("{:#?}", Header::new(&archive)?);
+    let header = archive.header();
+    let strings = archive.stringtable();
 
+    let required_features: Result<Vec<_>, _> = (header.required_feature_first_idx() as usize..)
+        .take(header.required_features_size() as usize)
+        .map(|idx| strings.substring(idx))
+        .collect();
+    let optional_features: Result<Vec<_>, _> = (header.optional_feature_first_idx() as usize..)
+        .take(header.optional_features_size() as usize)
+        .map(|idx| strings.substring(idx))
+        .collect();
+
+    // print header
+    let header = Header {
+        bbox: (
+            FixedI64(header.bbox_left()),
+            FixedI64(header.bbox_right()),
+            FixedI64(header.bbox_top()),
+            FixedI64(header.bbox_bottom()),
+        ),
+        required_features: required_features?,
+        optional_features: optional_features?,
+        writingprogram: strings.substring(header.writingprogram_idx() as usize)?,
+        source: strings.substring(header.source_idx() as usize)?,
+        osmosis_replication_timestamp: header.osmosis_replication_timestamp(),
+        osmosis_replication_sequence_number: header.osmosis_replication_sequence_number(),
+        osmosis_replication_base_url: strings
+            .substring(header.osmosis_replication_base_url_idx() as usize)?,
+    };
+    println!("{:#?}", header);
+
+    // print nodes
     if types.contains('n') {
         for node in archive.nodes().slice(..3) {
             let tags: Result<Vec<_>, _> = osmflat::tags(&archive, node.tags()).collect();
@@ -176,6 +167,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let nodes_index = archive.nodes_index();
 
+    // print ways
     if types.contains('w') {
         for way in archive.ways() {
             let tags: Result<Vec<_>, _> = osmflat::tags(&archive, way.tags()).collect();
@@ -192,6 +184,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
+    // print relations
     if types.contains('r') {
         for (relation_idx, relation) in archive.relations().slice(..3).iter().enumerate() {
             let tags: Result<Vec<_>, _> = osmflat::tags(&archive, relation.tags()).collect();
