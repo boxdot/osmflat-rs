@@ -3,8 +3,9 @@
 //!
 //! Demonstrates
 //!
-//!  * iteration through way
-//!  * accessing of tags
+//!  * iteration through ways
+//!  * accessing of tags belonging to a way
+//!  * accessing of nodes belonging to a way
 //!  * length calculation on the Earth using the haversine function
 //!
 //! LICENSE
@@ -45,19 +46,28 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .ok_or("USAGE: road_length <osmflat-archive>")?;
     let archive = Osm::open(FileResourceStorage::new(archive_dir))?;
 
+    let tags = archive.tags();
+    let tags_index = archive.tags_index();
+    let strings = archive.stringtable();
+
+    let highways = archive.ways().iter().filter(|way| {
+        way.tags().any(|idx| {
+            // A way reference a range of tags by storing a contiguous range of
+            // indexes in `tags_index`. Each of these references a tag in `tags`.
+            // This is a common pattern when flattening 1 to n relations.
+            let tag = tags.at(tags_index.at(idx as usize).value() as usize);
+            strings.substring_raw(tag.key_idx() as usize) == b"highway"
+        })
+    });
+
     let nodes = archive.nodes();
     let nodes_index = archive.nodes_index();
 
-    let is_highway = |tag: Result<_, _>| tag.map(|(k, _v)| k == "highway").unwrap_or(false);
-
-    let highways = archive
-        .ways()
-        .iter()
-        .filter(|way| osmflat::tags(&archive, way.tags()).any(is_highway));
     let lengths = highways.map(|way| {
         let coords = way.refs().map(|idx| {
             // A way references a range of nodes by storing a contiguous range of
             // indexes in `nodes_index`. Each of these references a node in `nodes`.
+            // This is a common pattern when flattening 1 to n relations.
             Coords::from_node(nodes.at(nodes_index.at(idx as usize).value() as usize))
         });
         let length: f64 = coords
@@ -67,8 +77,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .sum();
         length
     });
+
     let length: f64 = lengths.sum();
-    println!("Length: {} km", length / 1000.0);
+    println!("Length: {:.0} km", length / 1000.0);
 
     Ok(())
 }
