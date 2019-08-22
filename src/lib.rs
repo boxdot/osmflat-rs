@@ -24,3 +24,20 @@ pub fn tags<'a>(
         Ok((key, val))
     })
 }
+
+/// Helper function to iterate through tags from osmflat.
+pub fn tags_raw<'a>(
+    archive: &'a osmflat::Osm,
+    range: std::ops::Range<u64>,
+) -> impl Iterator<Item = (&'a [u8], &'a [u8])> + 'a + Clone {
+    let tags = archive.tags();
+    let tags_index = archive.tags_index();
+    let strings = archive.stringtable();
+
+    range.map(move |idx| {
+        let tag = tags.at(tags_index.at(idx as usize).value() as usize);
+        let key = strings.substring_raw(tag.key_idx() as usize);
+        let val = strings.substring_raw(tag.value_idx() as usize);
+        (key, val)
+    })
+}
