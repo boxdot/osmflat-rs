@@ -41,3 +41,42 @@ pub fn tags_raw<'a>(
         (key, val)
     })
 }
+
+/// Helper function to iterate through tags from osmflat.
+pub fn get_tag_raw<'a>(
+    archive: &'a osmflat::Osm,
+    mut range: std::ops::Range<u64>,
+    key: &[u8],
+) -> Option<&'a [u8]> {
+    let tags = archive.tags();
+    let tags_index = archive.tags_index();
+    let strings = archive.stringtable();
+
+    range.find_map(move |idx| {
+        let tag = tags.at(tags_index.at(idx as usize).value() as usize);
+        if key == strings.substring_raw(tag.key_idx() as usize) {
+            Some(strings.substring_raw(tag.value_idx() as usize))
+        } else {
+            None
+        }
+    })
+}
+
+/// Helper function to iterate through tags from osmflat.
+pub fn get_tag<'a>(
+    archive: &'a osmflat::Osm,
+    range: std::ops::Range<u64>,
+    key: &[u8],
+) -> Result<Option<&'a str>, std::str::Utf8Error> {
+    let tags = archive.tags();
+    let tags_index = archive.tags_index();
+    let strings = archive.stringtable();
+
+    for idx in range {
+        let tag = tags.at(tags_index.at(idx as usize).value() as usize);
+        if key == strings.substring_raw(tag.key_idx() as usize) {
+            return Ok(Some(strings.substring(tag.value_idx() as usize)?));
+        }
+    }
+    Ok(None)
+}
