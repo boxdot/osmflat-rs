@@ -54,7 +54,8 @@ pub fn get_tag_raw<'a>(
 
     range.find_map(move |idx| {
         let tag = tags.at(tags_index.at(idx as usize).value() as usize);
-        if key == strings.substring_raw(tag.key_idx() as usize) {
+        let key_block = &strings.as_bytes()[tag.key_idx() as usize..];
+        if key_block.starts_with(key) && *key_block.get(key.len()).unwrap_or(&0) == 0 {
             Some(strings.substring_raw(tag.value_idx() as usize))
         } else {
             None
@@ -74,7 +75,8 @@ pub fn get_tag<'a>(
 
     for idx in range {
         let tag = tags.at(tags_index.at(idx as usize).value() as usize);
-        if key == strings.substring_raw(tag.key_idx() as usize) {
+        let key_block = &strings.as_bytes()[tag.key_idx() as usize..];
+        if key_block.starts_with(key) && *key_block.get(key.len()).unwrap_or(&0) == 0 {
             return Ok(Some(strings.substring(tag.value_idx() as usize)?));
         }
     }
