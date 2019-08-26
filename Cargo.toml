@@ -15,7 +15,7 @@ byteorder = "1.3.2"
 bytes = "0.4.12"
 colored = "1.8.0"
 failure = "0.1.5"
-flatdata = { git = "https://github.com/heremaps/flatdata", rev = "49e35d" }
+flatdata = { git = "https://github.com/veaac/flatdata", rev = "7beb0dbcec6d4c7db49e2c517ba0bf3d29527b58" }
 flate2 = "1.0.9"
 itertools = "0.8.0"
 log = "0.4.8"

@@ -9,6 +9,7 @@ mod osmflat;
 pub use crate::osmflat::*;
 
 /// Helper function to iterate through tags from osmflat.
+#[inline]
 pub fn tags<'a>(
     archive: &'a osmflat::Osm,
     range: std::ops::Range<u64>,
@@ -26,6 +27,7 @@ pub fn tags<'a>(
 }
 
 /// Helper function to iterate through tags from osmflat.
+#[inline]
 pub fn tags_raw<'a>(
     archive: &'a osmflat::Osm,
     range: std::ops::Range<u64>,
@@ -43,6 +45,7 @@ pub fn tags_raw<'a>(
 }
 
 /// Helper function to iterate through tags from osmflat.
+#[inline]
 pub fn get_tag_raw<'a>(
     archive: &'a osmflat::Osm,
     mut range: std::ops::Range<u64>,
@@ -64,6 +67,7 @@ pub fn get_tag_raw<'a>(
 }
 
 /// Helper function to iterate through tags from osmflat.
+#[inline]
 pub fn get_tag<'a>(
     archive: &'a osmflat::Osm,
     range: std::ops::Range<u64>,
@@ -81,4 +85,29 @@ pub fn get_tag<'a>(
         }
     }
     Ok(None)
+}
+
+#[inline]
+pub fn tag_matches<'a>(
+    archive: &'a osmflat::Osm,
+    range: std::ops::Range<u64>,
+    key: &[u8],
+    value: &[u8],
+) -> bool {
+    let tags = archive.tags();
+    let tags_index = archive.tags_index();
+    let strings = archive.stringtable();
+
+    let matches = |idx, value| {
+        let block = &strings.as_bytes()[idx as usize..];
+        return block.starts_with(value) && *block.get(value.len()).unwrap_or(&0) == 0;
+    };
+
+    for idx in range {
+        let tag = tags.at(tags_index.at(idx as usize).value() as usize);
+        if matches(tag.key_idx(), key) {
+            return matches(tag.value_idx(), value);
+        }
+    }
+    return false;
 }
