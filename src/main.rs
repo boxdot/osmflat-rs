@@ -224,7 +224,7 @@ fn resolve_ways(
 
 fn serialize_ways(
     block: &osmpbf::PrimitiveBlock,
-    nodes_id_to_idx: &Vec<u64>,
+    nodes_id_to_idx: &[u64],
     ways: &mut flatdata::ExternalVector<osmflat::Way>,
     ways_id_to_idx: &mut ids::IdTableBuilder,
     stringtable: &mut StringTable,
