@@ -1,9 +1,5 @@
-#[macro_use]
-extern crate flatdata;
-
 mod args;
 mod ids;
-mod osmflat;
 mod osmpbf;
 mod parallel;
 mod stats;
