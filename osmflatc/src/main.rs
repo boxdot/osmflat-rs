@@ -511,15 +511,7 @@ fn serialize_relation_blocks(
     Ok(())
 }
 
-fn run() -> Result<(), Error> {
-    let args = args::Args::from_args();
-    stderrlog::new()
-        .module(module_path!())
-        .timestamp(stderrlog::Timestamp::Second)
-        .verbosity(args.verbose as usize + 2)
-        .init()
-        .unwrap();
-
+fn run(args: args::Args) -> Result<(), Error> {
     let input_file = File::open(&args.input)?;
     let input_data = unsafe { Mmap::map(&input_file)? };
 
@@ -614,7 +606,18 @@ fn run() -> Result<(), Error> {
 }
 
 fn main() {
-    if let Err(e) = run() {
+    let args = args::Args::from_args();
+    let level = match args.verbose {
+        0 => "info",
+        1 => "debug",
+        _ => "trace",
+    };
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or(level))
+        .default_format_module_path(false)
+        .default_format_timestamp_nanos(true)
+        .init();
+
+    if let Err(e) = run(args) {
         eprintln!("{}: {}", "Error".red(), e);
         std::process::exit(1);
     }
