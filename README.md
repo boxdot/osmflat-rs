@@ -2,8 +2,8 @@
 
 ![berlin-with-some-parks-and-rivers](examples/berlin-with-some-parks-and-rivers.jpg)
 
-Flat OpenStreetMap (OSM) data format providing an efficient *random* data access
-through [memory mapped files].
+Flat OpenStreetMap (OSM) data format providing an efficient *random* data
+access through [memory mapped files].
 
 The data format is described and implemented in [flatdata]. The [schema]
 describes the fundamental OSM data structures: nodes, ways, relations and
@@ -12,8 +12,8 @@ expressed through indexes.
 
 ## Compiler
 
-Besides the library for working with osmflat archives, this crate contains an
-OSM [pbf format][PBF format] to osmflat data compiler.
+Besides the library for working with osmflat archives, the crate `osmflatc`
+contains an OSM [pbf format][PBF format] to osmflat data compiler.
 
 To compile OSM data from pbf to osmflat use:
 
@@ -28,6 +28,9 @@ the archive fits to the schema used for reading it. The archive data is not
 compressed.
 
 ## Using data
+
+You can use any [flatdata] supported language for reading an osmflat archive.
+For reading the data in Rust, we provide the `osmflat` crate.
 
 First, add this to your Cargo.toml:
 
@@ -52,12 +55,13 @@ fn main() {
 }
 ```
 
-Cf. the [examples] directory for more examples. Feel free to add another
-example, if you have an idea what to with the amazing OSM data in few lines of
-code. 😁
+## Examples
 
-The above map was rendered by `examples/roads2png.rs` in ~ 170 loc from the osmflat
-archive based on the [latest][latest-berlin-map] Berlin OSM data.
+Check the [osmflat/examples] directory. Feel free to add another example, if
+you have an idea what to do with the amazing OSM data in few lines of code. 😁
+
+The above map was rendered by `osmflat/examples/roads2png.rs` in ~ 170 loc from
+the osmflat archive based on the [latest][latest-berlin-map] Berlin OSM data.
 
 ## License
 
