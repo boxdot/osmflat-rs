@@ -77,10 +77,10 @@ for inclusion in this document by you, as defined in the Apache-2.0 license,
 shall be dual licensed as above, without any additional terms or conditions.
 
 [flatdata]: https://github.com/heremaps/flatdata
-[schema]: src/flatdata/osm.flatdata
+[schema]: flatdata/osm.flatdata
 [memory mapped files]: https://en.wikipedia.org/wiki/Memory-mapped_file
 [PBF format]: https://wiki.openstreetmap.org/wiki/PBF_Format
-[examples]: examples
+[examples]: osmflat/examples
 [latest-berlin-map]: http://download.geofabrik.de/europe/germany/berlin.html
 [OSM-binary]: https://github.com/scrosby/OSM-binary
 
