@@ -10,7 +10,6 @@ use crate::stats::Stats;
 use crate::strings::StringTable;
 
 use colored::*;
-use failure::{format_err, Error};
 use flatdata::{ArchiveBuilder, FileResourceStorage};
 use itertools::Itertools;
 use log::info;
@@ -22,6 +21,8 @@ use std::collections::{hash_map, HashMap};
 use std::fs::File;
 use std::io;
 use std::str;
+
+type Error = Box<dyn std::error::Error>;
 
 fn serialize_header(
     header_block: &osmpbf::HeaderBlock,
@@ -557,10 +558,11 @@ fn run() -> Result<(), Error> {
 
     // Serialize header
     if pbf_header.len() != 1 {
-        return Err(format_err!(
+        return Err(format!(
             "Require exactly one header block, but found {}",
             pbf_header.len()
-        ));
+        )
+        .into());
     }
     let idx = &pbf_header[0];
     let pbf_header: osmpbf::HeaderBlock = read_block(&input_data, &idx)?;
