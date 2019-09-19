@@ -310,15 +310,15 @@ struct Args {
     osmflat_archive: PathBuf,
 
     /// SVG filename to output
-    #[structopt(short = "o", long = "output", parse(from_os_str))]
+    #[structopt(short, long, parse(from_os_str))]
     output: PathBuf,
 
     /// Width of the image
-    #[structopt(short = "w", long = "width", default_value = "800")]
+    #[structopt(short, long, default_value = "800")]
     width: u32,
 
     /// Height of the image
-    #[structopt(short = "h", long = "height", default_value = "600")]
+    #[structopt(short, long, default_value = "600")]
     height: u32,
 }
 

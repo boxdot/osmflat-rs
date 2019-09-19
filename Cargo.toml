@@ -1,48 +1,8 @@
-[package]
-name = "osmflat"
-version = "0.1.0"
-authors = ["boxdot <d@zerovolt.org>"]
-license = "MIT/Apache-2.0"
-description = "Flat OpenStreetMap (OSM) data format with very efficient random access pattern through memory mapped files."
-repository = "https://github.com/boxdot/osmflat-rs"
-keywords = ["serialization", "osm", "openstreetmap", "flatdata"]
-categories = ["encoding"]
-readme = "README.md"
-edition = "2018"
+[workspace]
+members = [
+    "osmflat",
+    "osmflatc",
+]
 
-[dependencies]
-byteorder = "1.3.2"
-bytes = "0.4.12"
-colored = "1.8.0"
-failure = "0.1.5"
-flatdata = "0.3.1"
-flate2 = "1.0.9"
-itertools = "0.8.0"
-log = "0.4.8"
-memmap = "0.6.2"
-pbr = "1.0.1"
-prost = "0.5.0"
-prost-derive = "0.5.0"
-prost-types = "0.5.0"
-rayon = "1.1.0"
-stderrlog = "0.4.1"
-structopt = "0.2.18"
-crossbeam = "0.7.2"
-inlinable_string = "0.1.0"
-parking_lot = "0.9.0"
-
-[build-dependencies]
-prost-build = "0.5.0"
-
-[dev-dependencies]
-bresenham = "0.1.1"
-png = "0.15.0"
-proptest = "0.9.4"
-smallvec = "0.6.10"
-svg = "0.5.12"
-serde = { version = "1.0.98", features = ["derive"] }
-serde_json = "1.0.40"
-
-[[bin]]
-name = "osmflatc"
-path = "src/main.rs"
+[patch.crates-io]
+osmflat = { path = "osmflat" }

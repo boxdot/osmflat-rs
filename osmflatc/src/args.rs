@@ -6,7 +6,7 @@ use structopt::StructOpt;
 #[structopt(name = "osmflatc")]
 pub struct Args {
     /// Verbose mode (-v, -vv, -vvv, etc.)
-    #[structopt(short = "v", long = "verbose", parse(from_occurrences))]
+    #[structopt(short, long, parse(from_occurrences))]
     pub verbose: u8,
 
     /// Input OSM pbf file
