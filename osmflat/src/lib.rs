@@ -2,7 +2,7 @@
 extern crate flatdata;
 
 // re-export what is needed from flatdata to use osmflat
-pub use flatdata::{Archive, FileResourceStorage};
+pub use flatdata::{Archive, ArchiveBuilder, FileResourceStorage};
 
 mod osmflat;
 

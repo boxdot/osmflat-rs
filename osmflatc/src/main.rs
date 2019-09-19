@@ -1,9 +1,5 @@
-#[macro_use]
-extern crate flatdata;
-
 mod args;
 mod ids;
-mod osmflat;
 mod osmpbf;
 mod parallel;
 mod stats;
@@ -14,7 +10,6 @@ use crate::stats::Stats;
 use crate::strings::StringTable;
 
 use colored::*;
-use failure::{format_err, Error};
 use flatdata::{ArchiveBuilder, FileResourceStorage};
 use itertools::Itertools;
 use log::info;
@@ -26,6 +21,8 @@ use std::collections::{hash_map, HashMap};
 use std::fs::File;
 use std::io;
 use std::str;
+
+type Error = Box<dyn std::error::Error>;
 
 fn serialize_header(
     header_block: &osmpbf::HeaderBlock,
@@ -224,7 +221,7 @@ fn resolve_ways(
 
 fn serialize_ways(
     block: &osmpbf::PrimitiveBlock,
-    nodes_id_to_idx: &Vec<u64>,
+    nodes_id_to_idx: &[u64],
     ways: &mut flatdata::ExternalVector<osmflat::Way>,
     ways_id_to_idx: &mut ids::IdTableBuilder,
     stringtable: &mut StringTable,
@@ -514,15 +511,7 @@ fn serialize_relation_blocks(
     Ok(())
 }
 
-fn run() -> Result<(), Error> {
-    let args = args::Args::from_args();
-    stderrlog::new()
-        .module(module_path!())
-        .timestamp(stderrlog::Timestamp::Second)
-        .verbosity(args.verbose as usize + 2)
-        .init()
-        .unwrap();
-
+fn run(args: args::Args) -> Result<(), Error> {
     let input_file = File::open(&args.input)?;
     let input_data = unsafe { Mmap::map(&input_file)? };
 
@@ -561,10 +550,11 @@ fn run() -> Result<(), Error> {
 
     // Serialize header
     if pbf_header.len() != 1 {
-        return Err(format_err!(
+        return Err(format!(
             "Require exactly one header block, but found {}",
             pbf_header.len()
-        ));
+        )
+        .into());
     }
     let idx = &pbf_header[0];
     let pbf_header: osmpbf::HeaderBlock = read_block(&input_data, &idx)?;
@@ -616,7 +606,18 @@ fn run() -> Result<(), Error> {
 }
 
 fn main() {
-    if let Err(e) = run() {
+    let args = args::Args::from_args();
+    let level = match args.verbose {
+        0 => "info",
+        1 => "debug",
+        _ => "trace",
+    };
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or(level))
+        .default_format_module_path(false)
+        .default_format_timestamp_nanos(true)
+        .init();
+
+    if let Err(e) = run(args) {
         eprintln!("{}: {}", "Error".red(), e);
         std::process::exit(1);
     }
