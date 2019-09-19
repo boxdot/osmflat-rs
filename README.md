@@ -1,4 +1,4 @@
-# osmflat [![travis status]][travis]
+# osmflat ![][ci]
 
 ![berlin-with-some-parks-and-rivers](examples/berlin-with-some-parks-and-rivers.jpg)
 
@@ -87,7 +87,4 @@ shall be dual licensed as above, without any additional terms or conditions.
 [examples]: osmflat/examples
 [latest-berlin-map]: http://download.geofabrik.de/europe/germany/berlin.html
 [OSM-binary]: https://github.com/scrosby/OSM-binary
-
-[travis]: https://travis-ci.org/boxdot/flatdata-rs
-[travis status]: https://travis-ci.org/boxdot/flatdata-rs.svg?branch=master
-[latest version]: https://img.shields.io/crates/v/flatdata.svg
+[ci]: https://github.com/boxdot/osmflat-rs/workflows/ci/badge.svg
