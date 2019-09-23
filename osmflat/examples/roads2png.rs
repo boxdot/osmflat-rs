@@ -174,12 +174,13 @@ fn render(archive: &Osm, width: u32) -> Image {
 
 #[derive(StructOpt, Debug)]
 struct Args {
+    /// Input osmflat archive
     #[structopt(parse(from_os_str))]
     input: PathBuf,
-
+    /// Output PNG filename
     #[structopt(short, long, parse(from_os_str))]
     output: PathBuf,
-
+    /// Width of the image (height is derived from ratio)
     #[structopt(short, long, default_value = "4320")]
     width: u32,
 }
