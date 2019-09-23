@@ -71,7 +71,7 @@ pub fn has_tag(archive: &Osm, range: Range<u64>, key: &[u8], value: &[u8]) -> bo
 
     let matches = |idx, value| {
         let block = &strings.as_bytes()[idx as usize..];
-        return block.starts_with(value) && *block.get(value.len()).unwrap_or(&0) == 0;
+        block.starts_with(value) && *block.get(value.len()).unwrap_or(&0) == 0
     };
 
     for idx in range {

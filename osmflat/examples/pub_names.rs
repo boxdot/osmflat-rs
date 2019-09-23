@@ -30,9 +30,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             let addrs = iter_tags(&archive, tag_range).filter(|(k, _)| k.starts_with(b"addr:"));
             for (k, v) in addrs {
-                match (str::from_utf8(k), str::from_utf8(v)) {
-                    (Ok(addr_type), Ok(addr)) => println!("  {}: {}", addr_type, addr),
-                    _ => (),
+                if let (Ok(addr_type), Ok(addr)) = (str::from_utf8(k), str::from_utf8(v)) {
+                    println!("  {}: {}", addr_type, addr)
                 }
             }
         }
