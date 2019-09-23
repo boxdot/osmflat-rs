@@ -9,10 +9,10 @@
 //!
 //! The code in this example file is released into the Public Domain.
 
-use osmflat::{Archive, FileResourceStorage, Osm, RefRelationMembers};
+use osmflat::{iter_tags, Archive, FileResourceStorage, Osm, RefRelationMembers, COORD_SCALE};
 
 use std::fmt;
-use std::str::Utf8Error;
+use std::str::{self, Utf8Error};
 
 /// Represents fixed point coordinates stored in OSM
 #[derive(Clone, Copy)]
@@ -20,7 +20,7 @@ struct FixedI64(i64);
 
 impl FixedI64 {
     fn value(self) -> f64 {
-        self.0 as f64 / osmflat::COORD_SCALE as f64
+        self.0 as f64 / COORD_SCALE as f64
     }
 }
 
@@ -151,15 +151,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     println!("{:#?}", header);
 
+    let collect_utf8_tags = |tags| -> Vec<(&str, &str)> {
+        iter_tags(&archive, tags)
+            .filter_map(|(k, v)| match (str::from_utf8(k), str::from_utf8(v)) {
+                (Ok(k), Ok(v)) => Some((k, v)),
+                _ => None,
+            })
+            .collect()
+    };
+
     // print nodes
     if types.contains('n') {
         for node in archive.nodes().slice(..3) {
-            let tags: Result<Vec<_>, _> = osmflat::tags(&archive, node.tags()).collect();
             let node = Node {
                 id: node.id(),
                 lat: FixedI64(node.lat()),
                 lon: FixedI64(node.lon()),
-                tags: tags?,
+                tags: collect_utf8_tags(node.tags()),
             };
 
             println!("{:#?}", node);
@@ -170,10 +178,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let nodes_index = archive.nodes_index();
     if types.contains('w') {
         for way in archive.ways() {
-            let tags: Result<Vec<_>, _> = osmflat::tags(&archive, way.tags()).collect();
             let way = Way {
                 id: way.id(),
-                tags: tags?,
+                tags: collect_utf8_tags(way.tags()),
                 nodes: way
                     .refs()
                     .map(|idx| nodes_index.at(idx as usize).value())
@@ -187,11 +194,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // print relations
     if types.contains('r') {
         for (relation_idx, relation) in archive.relations().slice(..3).iter().enumerate() {
-            let tags: Result<Vec<_>, _> = osmflat::tags(&archive, relation.tags()).collect();
             let members: Result<Vec<_>, _> = Member::new_slice(&archive, relation_idx).collect();
             let relation = Relation {
                 id: relation.id(),
-                tags: tags?,
+                tags: collect_utf8_tags(relation.tags()),
                 members: members?,
             };
 

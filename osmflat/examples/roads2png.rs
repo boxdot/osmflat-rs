@@ -1,4 +1,4 @@
-use osmflat::{Archive, FileResourceStorage, Osm};
+use osmflat::{find_tag_by, Archive, FileResourceStorage, Osm, RefNode, RefWay, COORD_SCALE};
 
 use bresenham::Bresenham;
 use itertools::Itertools;
@@ -17,11 +17,11 @@ struct GeoCoord {
 }
 
 /// Convert osmflat Node into GeoCoord.
-impl<'a> From<osmflat::RefNode<'a>> for GeoCoord {
-    fn from(node: osmflat::RefNode<'a>) -> Self {
+impl<'a> From<RefNode<'a>> for GeoCoord {
+    fn from(node: RefNode<'a>) -> Self {
         Self {
-            lat: node.lat() as f64 / osmflat::COORD_SCALE as f64,
-            lon: node.lon() as f64 / osmflat::COORD_SCALE as f64,
+            lat: node.lat() as f64 / COORD_SCALE as f64,
+            lon: node.lon() as f64 / COORD_SCALE as f64,
         }
     }
 }
@@ -75,43 +75,44 @@ fn map_transform(
     }
 }
 
-fn way_coords<'a>(
-    archive: &'a osmflat::Osm,
-    way: osmflat::RefWay,
-) -> impl Iterator<Item = GeoCoord> + 'a {
+fn way_coords<'a>(archive: &'a Osm, way: RefWay) -> impl Iterator<Item = GeoCoord> + 'a {
     let nodes = archive.nodes();
     let nodes_index = archive.nodes_index();
     way.refs()
         .map(move |i| nodes.at(nodes_index.at(i as usize).value() as usize).into())
 }
 
-fn way_filter(way: osmflat::RefWay, archive: &osmflat::Osm) -> bool {
-    let unwanted_highway_types = [
-        "pedestrian",
-        "steps",
-        "footway",
-        "construction",
-        "bic",
-        "cycleway",
-        "layby",
-        "bridleway",
-        "path",
+fn way_filter(way: RefWay, archive: &Osm) -> bool {
+    const UNWANTED_HIGHWAY_TYPES: [&[u8]; 9] = [
+        b"pedestrian\0",
+        b"steps\0",
+        b"footway\0",
+        b"construction\0",
+        b"bic\0",
+        b"cycleway\0",
+        b"layby\0",
+        b"bridleway\0",
+        b"path\0",
     ];
 
     // Filter all ways that do not have desirable highway tag.
-    osmflat::tags(archive, way.tags())
-        .filter_map(Result::ok)
-        .any(|(key, val)| key == "highway" && !unwanted_highway_types.contains(&val))
+    find_tag_by(archive, way.tags(), |key_block, val_block| {
+        key_block.starts_with(b"highway\0")
+            && !UNWANTED_HIGHWAY_TYPES
+                .iter()
+                .any(|t| val_block.starts_with(t))
+    })
+    .is_some()
 }
 
-fn roads(archive: &osmflat::Osm) -> impl Iterator<Item = osmflat::RefWay> {
+fn roads(archive: &Osm) -> impl Iterator<Item = RefWay> {
     archive
         .ways()
         .iter()
         .filter(move |&way| way_filter(way, archive))
 }
 
-fn render(archive: &osmflat::Osm, width: u32) -> Image {
+fn render(archive: &Osm, width: u32) -> Image {
     // compute extent
     let coords = roads(archive).flat_map(|way| way_coords(archive, way));
     let (min, max) = compute_bounds(coords);

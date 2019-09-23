@@ -1,18 +1,16 @@
-//! Calculate the length of the road network (everything tagged `highway=*`)
-//! from the input archive.
+//! Show the names and addresses of all pubs.
 //!
 //! Demonstrates
 //!
-//!  * iteration through ways
-//!  * accessing of tags belonging to a way
-//!  * accessing of nodes belonging to a way
-//!  * length calculation on the Earth using the haversine function
+//!  * iteration through tags belonging to a node and a way
+//!  * accessing of tags by key
+//!  * filtering of tags
 //!
 //! LICENSE
 //!
 //! The code in this example file is released into the Public Domain.
 
-use osmflat::{Archive, FileResourceStorage, Osm};
+use osmflat::{find_tag, has_tag, iter_tags, Archive, FileResourceStorage, Osm};
 use std::str;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -25,17 +23,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let ways_tags = archive.ways().iter().map(|way| way.tags());
 
     for tag_range in nodes_tags.chain(ways_tags) {
-        if osmflat::tag_matches(&archive, tag_range.clone(), b"amenity", b"pub") {
-            let name = osmflat::get_tag(&archive, tag_range.clone(), b"name");
-            println!(
-                "{}",
-                name.unwrap_or(Some("broken pub name"))
-                    .unwrap_or("unknown pub name")
-            );
+        if has_tag(&archive, tag_range.clone(), b"amenity", b"pub") {
+            let name = find_tag(&archive, tag_range.clone(), b"name");
+            let name = name.map(|s| str::from_utf8(s).unwrap_or("broken pub name"));
+            println!("{}", name.unwrap_or("unknown pub name"));
 
-            // TODO: Also expose find_tag(archive, range, pred)?
-            let addrs =
-                osmflat::tags_raw(&archive, tag_range).filter(|(k, _)| k.starts_with(b"addr:"));
+            let addrs = iter_tags(&archive, tag_range).filter(|(k, _)| k.starts_with(b"addr:"));
             for (k, v) in addrs {
                 match (str::from_utf8(k), str::from_utf8(v)) {
                     (Ok(addr_type), Ok(addr)) => println!("  {}: {}", addr_type, addr),
