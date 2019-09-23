@@ -1,3 +1,9 @@
+//! Renders all roads by using a simple Bresenham line algorithm.
+//!
+//! LICENSE
+//!
+//! The code in this example file is released into the Public Domain.
+
 use osmflat::{find_tag_by, Archive, FileResourceStorage, Osm, RefNode, RefWay, COORD_SCALE};
 
 use bresenham::Bresenham;
@@ -144,10 +150,10 @@ struct Args {
     #[structopt(parse(from_os_str))]
     input: PathBuf,
 
-    #[structopt(short = "o", long = "output", parse(from_os_str))]
+    #[structopt(short, long, parse(from_os_str))]
     output: PathBuf,
 
-    #[structopt(short = "w", long = "width", default_value = "4320")]
+    #[structopt(short, long, default_value = "4320")]
     width: u32,
 }
 
