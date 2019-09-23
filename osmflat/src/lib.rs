@@ -7,5 +7,8 @@ pub use flatdata::{Archive, ArchiveBuilder, FileResourceStorage};
 mod osmflat;
 mod tags;
 
-pub use crate::osmflat::*;
+pub use osmflat::*;
 pub use tags::*;
+
+/// Foobar
+pub use osmflat::Osm;
