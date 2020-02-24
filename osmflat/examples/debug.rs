@@ -1,4 +1,4 @@
-//! Dump the contents of the input archive in a debug format.
+//! Dumps the contents of the input archive in a debug format.
 //!
 //! Demonstrates
 //!
