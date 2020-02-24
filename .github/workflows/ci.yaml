@@ -33,9 +33,9 @@ jobs:
         - build: win-gnu
           os: windows-2019
           rust: stable-x86_64-gnu
-      env:
-        RUSTFLAGS: -D warnings
-        CARGO_INCREMENTAL: 0
+    env:
+      RUSTFLAGS: -D warnings
+      CARGO_INCREMENTAL: 0
     steps:
       - name: Checkout repository
         uses: actions/checkout@v1
