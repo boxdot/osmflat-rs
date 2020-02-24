@@ -42,7 +42,12 @@ impl BlockType {
             let (key, wire_type) = prost::encoding::decode_key(&mut cursor)?;
             if key != PRIMITIVE_GROUP_TAG {
                 // primitive group
-                prost::encoding::skip_field(wire_type, &mut cursor)?;
+                prost::encoding::skip_field(
+                    wire_type,
+                    key,
+                    &mut cursor,
+                    prost::encoding::DecodeContext::default(),
+                )?;
                 continue;
             }
 
@@ -161,7 +166,7 @@ pub fn read_block<T: prost::Message + Default>(
             "unknown compression",
         ));
     };
-    Ok(T::decode(blob_data)?)
+    Ok(T::decode(blob_data.as_slice())?)
 }
 
 fn blob_type_from_blob_info(
@@ -169,7 +174,7 @@ fn blob_type_from_blob_info(
     blob_len: usize,
     blob: Vec<u8>,
 ) -> Result<BlockIndex, io::Error> {
-    let blob = Blob::decode(&blob)?;
+    let blob = Blob::decode(blob.as_slice())?;
 
     let mut blob_buf = Vec::new();
     let blob_data = if blob.raw.is_some() {

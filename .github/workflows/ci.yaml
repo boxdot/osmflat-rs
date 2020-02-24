@@ -5,26 +5,27 @@ on:
     branches:
     - master
   schedule:
-  - cron: '00 01 * * *'
+    - cron: '00 01 * * *'
+
 jobs:
-  test:
-    name: test
+  rust:
+    name: Rust
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         build: [stable, beta, nightly, macos, win-msvc, win-gnu]
         include:
         - build: stable
-          os: ubuntu-18.04
+          os: ubuntu-latest
           rust: stable
         - build: beta
-          os: ubuntu-18.04
+          os: ubuntu-latest
           rust: beta
         - build: nightly
-          os: ubuntu-18.04
+          os: ubuntu-latest
           rust: nightly
         - build: macos
-          os: macOS-10.14
+          os: macOS-latest
           rust: stable
         - build: win-msvc
           os: windows-2019
@@ -32,18 +33,21 @@ jobs:
         - build: win-gnu
           os: windows-2019
           rust: stable-x86_64-gnu
+    env:
+      RUSTFLAGS: -D warnings
+      CARGO_INCREMENTAL: 0
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v1
-      with:
-        fetch-depth: 1
-    - name: Install Rust
-      uses: hecrj/setup-rust-action@v1
-      with:
-        rust-version: ${{ matrix.rust }}
-    - run: cargo build --all-targets
-    - run: cargo doc
-    - run: cargo test
+      - name: Checkout repository
+        uses: actions/checkout@v1
+        with:
+          fetch-depth: 1
+      - name: Install Rust
+        uses: hecrj/setup-rust-action@v1
+        with:
+          rust-version: ${{ matrix.rust }}
+      - run: cargo build --all-targets
+      - run: cargo test
+      - run: cargo doc
 
   rustfmt:
     name: rustfmt

@@ -613,8 +613,8 @@ fn main() {
         _ => "trace",
     };
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or(level))
-        .default_format_module_path(false)
-        .default_format_timestamp_nanos(true)
+        .format_module_path(false)
+        .format_timestamp_nanos()
         .init();
 
     if let Err(e) = run(args) {
