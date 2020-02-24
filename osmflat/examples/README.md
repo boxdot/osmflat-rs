@@ -20,9 +20,13 @@ copied and modified.
 
 ## Rendering
 
-* `render-roads` - renders all roads by using a simple Bresenham line algorithm.
-* `render-svg` - renders selected features from the input archive as svg.
-  ![](berlin-with-some-parks-and-rivers.jpg)
-
+* `render-roads` - renders all roads by using a simple Bresenham line algorithm as PNG.
+  <p align="center">
+    <img src="berlin-roads.png" alt="Berlin Roads" width="500">
+  </p>
+* `render-features` - renders selected features from the input archive as SVG.
+  <p align="center">
+    <img src="berlin-features.svg" alt="Berlin Features" width="500">
+  </p>
 
 [examples directory]: https://github.com/osmcode/libosmium/tree/master/examples
