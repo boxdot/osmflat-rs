@@ -14,10 +14,10 @@ edition = "2018"
 flatdata = "0.3.1"
 
 [dev-dependencies]
-itertools = "0.8.0"
-png = "0.15.0"
-serde = { version = "1.0.101", features = ["derive"] }
-serde_json = "1.0.40"
-smallvec = "0.6.10"
-structopt = "0.3.1"
+itertools = "0.8.2"
+png = "0.15.3"
+serde = { version = "1.0.104", features = ["derive"] }
+serde_json = "1.0.48"
+smallvec = "1.2.0"
+structopt = "0.3.9"
 svg = "0.6.0"
