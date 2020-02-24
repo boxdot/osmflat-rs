@@ -1,4 +1,4 @@
-//! Show the names and addresses of all pubs.
+//! Shows the names and addresses of all pubs.
 //!
 //! Demonstrates
 //!

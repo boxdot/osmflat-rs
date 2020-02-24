@@ -1,5 +1,5 @@
-//! Calculate the length of the road network (everything tagged `highway=*`)
-//! from the input archive.
+//! Calculates the length of the road network (everything tagged `highway=*`)
+//! in the input archive.
 //!
 //! Demonstrates
 //!

@@ -1,5 +1,4 @@
-//! Example which renders selected features from a given osmflat archive into a
-//! svg.
+//! Renders selected features from the input archive as svg.
 //!
 //! For supported features check `Category` enum and `classify` function.
 //!
