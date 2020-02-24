@@ -1,6 +1,6 @@
 # osmflat ![][ci]
 
-![berlin-features](examples/berlin-features.png)
+![berlin-features](berlin-features.png)
 
 Flat OpenStreetMap (OSM) data format providing an efficient *random* data
 access through [memory mapped files].
