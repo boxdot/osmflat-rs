@@ -84,7 +84,7 @@ shall be dual licensed as above, without any additional terms or conditions.
 [schema]: flatdata/osm.flatdata
 [memory mapped files]: https://en.wikipedia.org/wiki/Memory-mapped_file
 [PBF format]: https://wiki.openstreetmap.org/wiki/PBF_Format
-[examples]: osmflat/examples
+[osmflat/examples]: osmflat/examples
 [latest-berlin-map]: http://download.geofabrik.de/europe/germany/berlin.html
 [OSM-binary]: https://github.com/scrosby/OSM-binary
 [ci]: https://github.com/boxdot/osmflat-rs/workflows/ci/badge.svg
