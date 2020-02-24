@@ -15,12 +15,14 @@ copied and modified.
 
 ## Simple
 
-* `pub_names` - shows the names and addresses of all pubs.
-* `road_length` - calculates the length of the road network in the input archive.
+* `pub-names` - shows the names and addresses of all pubs.
+* `road-length` - calculates the length of the road network in the input archive.
 
 ## Rendering
 
-* `roads2png` - renders all roads by using a simple Bresenham line algorithm.
+* `render-roads` - renders all roads by using a simple Bresenham line algorithm.
 * `render-svg` - renders selected features from the input archive as svg.
+  ![](berlin-with-some-parks-and-rivers.jpg)
+
 
 [examples directory]: https://github.com/osmcode/libosmium/tree/master/examples
