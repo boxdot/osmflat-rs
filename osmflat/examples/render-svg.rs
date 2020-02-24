@@ -13,8 +13,15 @@
 //! However, the final svg contains already so many polyline, that having alrady
 //! transformed coordinates does not change much. If you need speed when showing
 //! the svg, feel free to apply simplifications in this program.
+//!
+//! LICENSE
+//!
+//! The code in this example file is released into the Public Domain.
 
-use flatdata::{Archive, FileResourceStorage};
+use osmflat::{
+    iter_tags, Archive, FileResourceStorage, Osm, RefNode, RefRelation, RefRelationMembers, RefWay,
+    COORD_SCALE,
+};
 use smallvec::{smallvec, SmallVec};
 use structopt::StructOpt;
 use svg::{node::element, Document};
@@ -24,6 +31,7 @@ use std::fmt::Write;
 use std::io;
 use std::ops::Range;
 use std::path::PathBuf;
+use std::str;
 
 /// Geographic coordinates represented by (latitude, longitude).
 #[derive(Debug, Clone, Copy, Default, PartialEq, PartialOrd)]
@@ -49,11 +57,11 @@ impl GeoCoord {
 }
 
 /// Convert osmflat Node into GeoCoord.
-impl From<osmflat::RefNode<'_>> for GeoCoord {
-    fn from(node: osmflat::RefNode) -> Self {
+impl From<RefNode<'_>> for GeoCoord {
+    fn from(node: RefNode) -> Self {
         Self {
-            lat: node.lat() as f64 / osmflat::COORD_SCALE as f64,
-            lon: node.lon() as f64 / osmflat::COORD_SCALE as f64,
+            lat: node.lat() as f64 / COORD_SCALE as f64,
+            lon: node.lon() as f64 / COORD_SCALE as f64,
         }
     }
 }
@@ -72,7 +80,7 @@ impl From<Range<u64>> for Polyline {
 }
 
 impl Polyline {
-    fn into_iter<'a>(self, archive: &'a osmflat::Osm) -> impl Iterator<Item = GeoCoord> + 'a {
+    fn into_iter<'a>(self, archive: &'a Osm) -> impl Iterator<Item = GeoCoord> + 'a {
         let nodes_index = archive.nodes_index();
         let nodes = archive.nodes();
         let to_node = move |idx| {
@@ -101,7 +109,7 @@ struct Feature {
 }
 
 impl Feature {
-    fn into_polyline(self, archive: &osmflat::Osm) -> Polyline {
+    fn into_polyline(self, archive: &Osm) -> Polyline {
         match self.cat {
             Category::Road | Category::River(_) => way_into_polyline(archive.ways().at(self.idx)),
             Category::Park | Category::Water => multipolygon_into_polyline(&archive, self.idx),
@@ -109,19 +117,19 @@ impl Feature {
     }
 }
 
-fn way_into_polyline(way: osmflat::RefWay) -> Polyline {
+fn way_into_polyline(way: RefWay) -> Polyline {
     Polyline {
         inner: smallvec![way.refs()],
     }
 }
 
-fn multipolygon_into_polyline(archive: &osmflat::Osm, idx: usize) -> Polyline {
+fn multipolygon_into_polyline(archive: &Osm, idx: usize) -> Polyline {
     let members = archive.relation_members().at(idx);
     let strings = archive.stringtable();
 
     let inner = members
         .filter_map(|m| match m {
-            osmflat::RefRelationMembers::WayMember(way_member)
+            RefRelationMembers::WayMember(way_member)
                 if strings.substring(way_member.role_idx() as usize) == Ok("outer") =>
             {
                 Some(archive.ways().at(way_member.way_idx() as usize).refs())
@@ -133,7 +141,7 @@ fn multipolygon_into_polyline(archive: &osmflat::Osm, idx: usize) -> Polyline {
 }
 
 /// Classifies all features from osmflat we want to render.
-fn classify<'a>(archive: &'a osmflat::Osm) -> impl Iterator<Item = Feature> + 'a {
+fn classify<'a>(archive: &'a Osm) -> impl Iterator<Item = Feature> + 'a {
     let ways = archive.ways().iter().enumerate();
     let ways = ways
         .filter_map(move |(idx, way)| classify_way(archive, way).map(|cat| Feature { idx, cat }));
@@ -144,35 +152,36 @@ fn classify<'a>(archive: &'a osmflat::Osm) -> impl Iterator<Item = Feature> + 'a
     ways.chain(rels)
 }
 
-fn classify_way(archive: &osmflat::Osm, way: osmflat::RefWay) -> Option<Category> {
+fn classify_way(archive: &Osm, way: RefWay) -> Option<Category> {
     // Filter all ways that have less than 2 nodes.
     if way.refs().start < way.refs().end + 2 {
         return None;
     }
 
-    const UNWANTED_HIGHWAY_TYPES: [&str; 9] = [
-        "pedestrian",
-        "steps",
-        "footway",
-        "construction",
-        "bic",
-        "cycleway",
-        "layby",
-        "bridleway",
-        "path",
+    const UNWANTED_HIGHWAY_TYPES: [&[u8]; 9] = [
+        b"pedestrian",
+        b"steps",
+        b"footway",
+        b"construction",
+        b"bic",
+        b"cycleway",
+        b"layby",
+        b"bridleway",
+        b"path",
     ];
 
-    // Filter all ways that do not have a highway tag. Also check for specific values.
-    for (key, val) in osmflat::tags(archive, way.tags()).filter_map(Result::ok) {
-        if key == "highway" {
+    // Filter all ways that do not have a highway tag. Also check for specific
+    // values.
+    for (key, val) in iter_tags(archive, way.tags()) {
+        if key == b"highway" {
             if UNWANTED_HIGHWAY_TYPES.contains(&val) {
                 return None;
             }
             return Some(Category::Road);
-        } else if key == "waterway" {
-            for (key, val) in osmflat::tags(archive, way.tags()).filter_map(Result::ok) {
-                if key == "width" || key == "maxwidth" {
-                    let width: u32 = val.parse().ok()?;
+        } else if key == b"waterway" {
+            for (key, val) in iter_tags(archive, way.tags()) {
+                if key == b"width" || key == b"maxwidth" {
+                    let width: u32 = str::from_utf8(val).ok()?.parse().ok()?;
                     return Some(Category::River(width));
                 }
             }
@@ -182,30 +191,34 @@ fn classify_way(archive: &osmflat::Osm, way: osmflat::RefWay) -> Option<Category
     None
 }
 
-fn classify_relation(archive: &osmflat::Osm, relation: osmflat::RefRelation) -> Option<Category> {
+fn classify_relation(archive: &Osm, relation: RefRelation) -> Option<Category> {
     let mut is_multipolygon = false;
     let mut is_park = false;
     let mut is_lake = false;
 
-    for (key, val) in osmflat::tags(archive, relation.tags()).filter_map(Result::ok) {
-        if key == "type" && val == "multipolygon" {
+    for (key, val) in iter_tags(archive, relation.tags()) {
+        if key == b"type" && val == b"multipolygon" {
+            if is_park {
+                return Some(Category::Park);
+            }
+            if is_lake {
+                return Some(Category::Water);
+            }
             is_multipolygon = true;
         }
-        if (key == "leisure" && val == "park")
-            || (key == "landuse" && (val == "recreation_ground" || val == "forest"))
+        if (key == b"leisure" && val == b"park")
+            || (key == b"landuse" && (val == b"recreation_ground" || val == b"forest"))
         {
+            if is_multipolygon {
+                return Some(Category::Park);
+            }
             is_park = true;
         }
-        if key == "water" && val == "lake" {
+        if key == b"water" && val == b"lake" {
+            if is_multipolygon {
+                return Some(Category::Water);
+            }
             is_lake = true;
-        }
-    }
-    if is_multipolygon {
-        if is_park {
-            return Some(Category::Park);
-        }
-        if is_lake {
-            return Some(Category::Water);
         }
     }
     None
@@ -213,7 +226,7 @@ fn classify_relation(archive: &osmflat::Osm, relation: osmflat::RefRelation) -> 
 
 /// Renders svg from classified polylines.
 fn render_svg<P>(
-    archive: &osmflat::Osm,
+    archive: &Osm,
     classified_polylines: P,
     output: PathBuf,
     width: u32,
@@ -326,7 +339,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::from_args();
 
     let storage = FileResourceStorage::new(args.osmflat_archive);
-    let archive = osmflat::Osm::open(storage)?;
+    let archive = Osm::open(storage)?;
 
     let features = classify(&archive);
     let archive_inner = archive.clone();

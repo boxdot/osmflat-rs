@@ -5,22 +5,10 @@ extern crate flatdata;
 pub use flatdata::{Archive, ArchiveBuilder, FileResourceStorage};
 
 mod osmflat;
+mod tags;
 
-pub use crate::osmflat::*;
+pub use osmflat::*;
+pub use tags::*;
 
-/// Helper function to iterate through tags from osmflat.
-pub fn tags<'a>(
-    archive: &'a osmflat::Osm,
-    range: std::ops::Range<u64>,
-) -> impl Iterator<Item = Result<(&'a str, &'a str), std::str::Utf8Error>> + 'a + Clone {
-    let tags = archive.tags();
-    let tags_index = archive.tags_index();
-    let strings = archive.stringtable();
-
-    range.map(move |idx| {
-        let tag = tags.at(tags_index.at(idx as usize).value() as usize);
-        let key = strings.substring(tag.key_idx() as usize)?;
-        let val = strings.substring(tag.value_idx() as usize)?;
-        Ok((key, val))
-    })
-}
+/// Foobar
+pub use osmflat::Osm;

@@ -14,7 +14,6 @@ edition = "2018"
 flatdata = "0.3.1"
 
 [dev-dependencies]
-bresenham = "0.1.1"
 itertools = "0.8.0"
 png = "0.15.0"
 serde = { version = "1.0.101", features = ["derive"] }

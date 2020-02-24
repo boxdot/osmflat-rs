@@ -1,6 +1,11 @@
-use osmflat::{Archive, FileResourceStorage, Osm};
+//! Renders all roads by using a simple Bresenham line algorithm.
+//!
+//! LICENSE
+//!
+//! The code in this example file is released into the Public Domain.
 
-use bresenham::Bresenham;
+use osmflat::{find_tag_by, Archive, FileResourceStorage, Osm, RefNode, RefWay, COORD_SCALE};
+
 use itertools::Itertools;
 use structopt::StructOpt;
 
@@ -17,11 +22,11 @@ struct GeoCoord {
 }
 
 /// Convert osmflat Node into GeoCoord.
-impl<'a> From<osmflat::RefNode<'a>> for GeoCoord {
-    fn from(node: osmflat::RefNode<'a>) -> Self {
+impl From<RefNode<'_>> for GeoCoord {
+    fn from(node: RefNode) -> Self {
         Self {
-            lat: node.lat() as f64 / osmflat::COORD_SCALE as f64,
-            lon: node.lon() as f64 / osmflat::COORD_SCALE as f64,
+            lat: node.lat() as f64 / COORD_SCALE as f64,
+            lon: node.lon() as f64 / COORD_SCALE as f64,
         }
     }
 }
@@ -66,52 +71,81 @@ fn compute_bounds(mut iter: impl Iterator<Item = GeoCoord>) -> (GeoCoord, GeoCoo
 fn map_transform(
     (width, height): (u32, u32),
     (min, max): (GeoCoord, GeoCoord),
-) -> impl FnMut(GeoCoord) -> (isize, isize) + Copy {
+) -> impl FnMut(GeoCoord) -> (i32, i32) + Copy {
     move |coord: GeoCoord| {
         (
-            ((coord.lon - min.lon) * f64::from(width) / (max.lon - min.lon)) as isize,
-            ((max.lat - coord.lat) * f64::from(height) / (max.lat - min.lat)) as isize,
+            ((coord.lon - min.lon) * f64::from(width) / (max.lon - min.lon)) as i32,
+            ((max.lat - coord.lat) * f64::from(height) / (max.lat - min.lat)) as i32,
         )
     }
 }
 
-fn way_coords<'a>(
-    archive: &'a osmflat::Osm,
-    way: osmflat::RefWay,
-) -> impl Iterator<Item = GeoCoord> + 'a {
+fn way_coords<'a>(archive: &'a Osm, way: RefWay) -> impl Iterator<Item = GeoCoord> + 'a {
     let nodes = archive.nodes();
     let nodes_index = archive.nodes_index();
     way.refs()
         .map(move |i| nodes.at(nodes_index.at(i as usize).value() as usize).into())
 }
 
-fn way_filter(way: osmflat::RefWay, archive: &osmflat::Osm) -> bool {
-    let unwanted_highway_types = [
-        "pedestrian",
-        "steps",
-        "footway",
-        "construction",
-        "bic",
-        "cycleway",
-        "layby",
-        "bridleway",
-        "path",
+fn way_filter(way: RefWay, archive: &Osm) -> bool {
+    const UNWANTED_HIGHWAY_TYPES: [&[u8]; 9] = [
+        b"pedestrian\0",
+        b"steps\0",
+        b"footway\0",
+        b"construction\0",
+        b"bic\0",
+        b"cycleway\0",
+        b"layby\0",
+        b"bridleway\0",
+        b"path\0",
     ];
 
     // Filter all ways that do not have desirable highway tag.
-    osmflat::tags(archive, way.tags())
-        .filter_map(Result::ok)
-        .any(|(key, val)| key == "highway" && !unwanted_highway_types.contains(&val))
+    find_tag_by(archive, way.tags(), |key_block, val_block| {
+        key_block.starts_with(b"highway\0")
+            && !UNWANTED_HIGHWAY_TYPES
+                .iter()
+                .any(|t| val_block.starts_with(t))
+    })
+    .is_some()
 }
 
-fn roads(archive: &osmflat::Osm) -> impl Iterator<Item = osmflat::RefWay> {
+fn roads(archive: &Osm) -> impl Iterator<Item = RefWay> {
     archive
         .ways()
         .iter()
         .filter(move |&way| way_filter(way, archive))
 }
 
-fn render(archive: &osmflat::Osm, width: u32) -> Image {
+/// Bresenham's line algorithm
+///
+/// https://en.wikipedia.org/wiki/Bresenham%27s_line_algorithm
+fn bresenham(mut x0: i32, mut y0: i32, x1: i32, y1: i32) -> impl Iterator<Item = (i32, i32)> {
+    let dx = (x1 - x0).abs();
+    let sx = if x0 < x1 { 1 } else { -1 };
+    let dy = -(y1 - y0).abs();
+    let sy = if y0 < y1 { 1 } else { -1 };
+    let mut err = dx + dy;
+
+    std::iter::from_fn(move || {
+        if x0 == x1 && y0 == y1 {
+            return None;
+        }
+        let res = (x0, y0);
+        let e2 = 2 * err;
+        if e2 >= dy {
+            err += dy;
+            x0 += sx;
+        }
+        if e2 <= dx {
+            err += dx;
+            y0 += sy;
+        }
+        Some(res)
+    })
+}
+
+fn render(archive: &Osm, width: u32) -> Image {
     // compute extent
     let coords = roads(archive).flat_map(|way| way_coords(archive, way));
     let (min, max) = compute_bounds(coords);
@@ -129,8 +163,8 @@ fn render(archive: &osmflat::Osm, width: u32) -> Image {
     let line_segments =
         roads(archive).flat_map(|way| way_coords(archive, way).map(t).tuple_windows());
 
-    for (from, to) in line_segments {
-        for (x, y) in Bresenham::new(from, to) {
+    for ((x0, y0), (x1, y1)) in line_segments {
+        for (x, y) in bresenham(x0, y0, x1, y1) {
             image.set_black(x as u32, y as u32);
         }
     }
@@ -140,13 +174,14 @@ fn render(archive: &osmflat::Osm, width: u32) -> Image {
 
 #[derive(StructOpt, Debug)]
 struct Args {
+    /// Input osmflat archive
     #[structopt(parse(from_os_str))]
     input: PathBuf,
-
-    #[structopt(short = "o", long = "output", parse(from_os_str))]
+    /// Output PNG filename
+    #[structopt(short, long, parse(from_os_str))]
     output: PathBuf,
-
-    #[structopt(short = "w", long = "width", default_value = "4320")]
+    /// Width of the image (height is derived from ratio)
+    #[structopt(short, long, default_value = "4320")]
     width: u32,
 }
 
