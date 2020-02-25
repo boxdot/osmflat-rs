@@ -1,11 +1,19 @@
 namespace osm {
 
-// Max 40 bits value used to indicate null references
+// Max 40 bits value used to indicate null references.
+/**
+ * Special value which represents an invalid index.
+ */
 const u64 INVALID_IDX = 0xFFFFFFFFFF;
 
-// All coordinate were scaled by this to convert them to integers
+/**
+ * All coordinate are scaled by this constant to convert them to integers.
+ */
 const u64 COORD_SCALE = 1000000000;
 
+/**
+ * Metadata attached to the archive.
+ */
 struct Header {
     bbox_left: i64 : 40;
     bbox_right: i64 : 40;
@@ -25,58 +33,128 @@ struct Header {
     osmosis_replication_base_url_idx: u64 : 40;
 }
 
+/**
+ * A `(key, value)` attached to a `Node`, `Way`, or `Relation.
+ */
 struct Tag {
+    /// Key index in `stringtable`
     key_idx: u64 : 40;
+    /// Value index in `stringtable`
     value_idx: u64 : 40;
 }
 
+/**
+ * A node is one of the core elements in the OpenStreetMap data model.
+ *
+ * It consists of a single point in space defined by its latitude, longitude and node id.
+ *
+ * See <https://wiki.openstreetmap.org/wiki/Node>.
+ */
 struct Node {
+    /// Unique node ID
     id: i64 : 40;
+    /// Latitude (scaled with `COORD_SCALE`).
     lat: i64 : 40;
+    /// Longitude (scaled with `COORD_SCALE`).
     lon: i64 : 40;
+    /**
+     * Range of tags attached to this node.
+     *
+     * The values of the range are indexes in the `tags_index` vector.
+     */
     @range(tags)
     tag_first_idx: u64 : 40;
 }
 
 /**
- * A struct indexing a node.
+ * Index of a node.
  */
 struct NodeIndex {
+    /// Index in the `nodes` vector.
     value: u64 : 40;
 }
 
+/**
+ * A way is an ordered list of nodes.
+ *
+ * See https://wiki.openstreetmap.org/wiki/Way.
+ */
 struct Way {
+    /// Unique ID of the way.
     id: i64 : 40;
+    /**
+     * Range of tags attached to this node.
+     *
+     * The values of the range are indexes in the `tags_index` vector.
+     */
     @range(tags)
     tag_first_idx: u64 : 40;
+    /**
+     * Range of nodes this way consists of.
+     *
+     * The values of the range are indexes in the `nodes_index` vector.
+     */
     @range(refs)
     ref_first_idx: u64 : 40;
 }
 
 /**
- * A struct indexing a tag.
+ * Index of a tag.
  */
 struct TagIndex {
+    /// Index in the `tags` vector.
     value: u64 : 40;
 }
 
+/// Node member of a relation.
 struct NodeMember {
+    /// Index of the node in the `nodes` vector.
     node_idx: u64 : 40;
+    /**
+     * Optional textual field describing the function of the node in the relation.
+     *
+     * Index in `stringtable`.
+     */
     role_idx: u64 : 40;
 }
 
+/// Way member of a relation.
 struct WayMember {
+    /// Index of the way in the `ways` vector.
     way_idx: u64 : 40;
+    /**
+     * Optional textual field describing the function of the way in the relation.
+     *
+     * Index in `stringtable`.
+     */
     role_idx: u64 : 40;
 }
 
+/// Relation member of a relation.
 struct RelationMember {
+    /// Index of the relation in the `relations` vector.
     relation_idx: u64 : 40;
+    /**
+     * Optional textual field describing the function of the relation in the parent relation.
+     *
+     * Index in `stringtable`.
+     */
     role_idx: u64 : 40;
 }
 
+/**
+ * A relation is an ordered list of one or more nodes, ways and/or relations as members.
+ *
+ * See https://wiki.openstreetmap.org/wiki/Relation.
+ */
 struct Relation {
+    /// Unique ID of the relation.
     id: i64 : 40;
+    /**
+     * Range of tags attached to this relation.
+     *
+     * The values of the range are indexes in the `tags` vector.
+     */
     @range(tags)
     tag_first_idx: u64 : 40;
 }

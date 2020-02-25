@@ -18,7 +18,7 @@
 //! The code in this example file is released into the Public Domain.
 
 use osmflat::{
-    iter_tags, Archive, FileResourceStorage, Osm, RefNode, RefRelation, RefRelationMembers, RefWay,
+    iter_tags, Archive, FileResourceStorage, NodeRef, Osm, RelationMembersRef, RelationRef, WayRef,
     COORD_SCALE,
 };
 use smallvec::{smallvec, SmallVec};
@@ -59,8 +59,8 @@ impl GeoCoord {
 }
 
 /// Convert osmflat Node into GeoCoord.
-impl From<RefNode<'_>> for GeoCoord {
-    fn from(node: RefNode) -> Self {
+impl From<NodeRef<'_>> for GeoCoord {
+    fn from(node: NodeRef) -> Self {
         Self {
             lat: node.lat() as f64 / COORD_SCALE as f64,
             lon: node.lon() as f64 / COORD_SCALE as f64,
@@ -119,7 +119,7 @@ impl Feature {
     }
 }
 
-fn way_into_polyline(way: RefWay) -> Polyline {
+fn way_into_polyline(way: WayRef) -> Polyline {
     Polyline {
         inner: smallvec![way.refs()],
     }
@@ -131,7 +131,7 @@ fn multipolygon_into_polyline(archive: &Osm, idx: usize) -> Polyline {
 
     let inner = members
         .filter_map(|m| match m {
-            RefRelationMembers::WayMember(way_member)
+            RelationMembersRef::WayMember(way_member)
                 if strings.substring(way_member.role_idx() as usize) == Ok("outer") =>
             {
                 Some(archive.ways().at(way_member.way_idx() as usize).refs())
@@ -154,7 +154,7 @@ fn classify<'a>(archive: &'a Osm) -> impl Iterator<Item = Feature> + 'a {
     ways.chain(rels)
 }
 
-fn classify_way(archive: &Osm, way: RefWay) -> Option<Category> {
+fn classify_way(archive: &Osm, way: WayRef) -> Option<Category> {
     // Filter all ways that have less than 2 nodes.
     if way.refs().end <= way.refs().start + 2 {
         return None;
@@ -193,7 +193,7 @@ fn classify_way(archive: &Osm, way: RefWay) -> Option<Category> {
     None
 }
 
-fn classify_relation(archive: &Osm, relation: RefRelation) -> Option<Category> {
+fn classify_relation(archive: &Osm, relation: RelationRef) -> Option<Category> {
     let mut is_multipolygon = false;
     let mut is_park = false;
     let mut is_lake = false;

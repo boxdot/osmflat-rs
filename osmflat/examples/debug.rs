@@ -9,7 +9,7 @@
 //!
 //! The code in this example file is released into the Public Domain.
 
-use osmflat::{iter_tags, Archive, FileResourceStorage, Osm, RefRelationMembers, COORD_SCALE};
+use osmflat::{iter_tags, Archive, FileResourceStorage, Osm, RelationMembersRef, COORD_SCALE};
 
 use std::fmt;
 use std::str::{self, Utf8Error};
@@ -90,17 +90,17 @@ impl<'ar> Member<'ar> {
             .at(relation_idx as usize)
             .map(move |member| {
                 let res = match member {
-                    RefRelationMembers::NodeMember(m) => Member {
+                    RelationMembersRef::NodeMember(m) => Member {
                         type_: Type::Node,
                         idx: m.node_idx(),
                         role: strings.substring(m.role_idx() as usize)?,
                     },
-                    RefRelationMembers::WayMember(m) => Member {
+                    RelationMembersRef::WayMember(m) => Member {
                         type_: Type::Way,
                         idx: m.way_idx(),
                         role: strings.substring(m.role_idx() as usize)?,
                     },
-                    RefRelationMembers::RelationMember(m) => Member {
+                    RelationMembersRef::RelationMember(m) => Member {
                         type_: Type::Relation,
                         idx: m.relation_idx(),
                         role: strings.substring(m.role_idx() as usize)?,

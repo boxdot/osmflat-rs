@@ -12,7 +12,7 @@
 //!
 //! The code in this example file is released into the Public Domain.
 
-use osmflat::{Archive, FileResourceStorage, Osm, RefNode};
+use osmflat::{Archive, FileResourceStorage, NodeRef, Osm};
 
 struct Coords {
     lat: f64,
@@ -20,7 +20,7 @@ struct Coords {
 }
 
 impl Coords {
-    fn from_node(node: RefNode) -> Self {
+    fn from_node(node: NodeRef) -> Self {
         Self {
             lat: node.lat() as f64 / osmflat::COORD_SCALE as f64,
             lon: node.lon() as f64 / osmflat::COORD_SCALE as f64,
