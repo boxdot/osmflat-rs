@@ -2280,11 +2280,17 @@ archive Osm
 
     impl<'a> flatdata::RefMut for RelationMut<'a> {}
 
-    /// Builtin union type of .osm.NodeMember, .osm.WayMember, .osm.RelationMember.
+    /// Enum for read-only heterogeneous access to elements in a
+    /// bucket of the [`relation_members`] resource.
+    ///
+    /// [`relation_members`]: struct.Archive{.osm.Osm}.html#method.relation_members
     #[derive(Clone, PartialEq)]
     pub enum RelationMembersRef<'a> {
+        #[allow(missing_docs)]
         NodeMember(<super::osm::NodeMember as flatdata::Struct<'a>>::Item),
+        #[allow(missing_docs)]
         WayMember(<super::osm::WayMember as flatdata::Struct<'a>>::Item),
+        #[allow(missing_docs)]
         RelationMember(<super::osm::RelationMember as flatdata::Struct<'a>>::Item),
     }
 
@@ -2315,11 +2321,20 @@ archive Osm
         }
     }
 
+    /// Builder of buckets in the [`relation_members`] resource.
+    ///
+    /// Refers to a single bucket in the [`relation_members`] multivector and
+    /// provides methods for adding heterogeneous data to the bucket.
+    ///
+    /// [`relation_members`]: struct.Archive{.osm.Osm}.html#method.relation_members
     pub struct RelationMembersBuilder<'a> {
         data: &'a mut Vec<u8>,
     }
 
     impl<'a> RelationMembersBuilder<'a> {
+        /// Adds data of the type [`NodeMember`] to the bucket.
+        ///
+        /// [`NodeMember`]: struct.NodeMember.html
         #[inline]
         pub fn add_node_member<'b>(
             &'b mut self,
@@ -2332,6 +2347,9 @@ archive Osm
                 &mut self.data[1 + old_len - flatdata::PADDING_SIZE..],
             )
         }
+        /// Adds data of the type [`WayMember`] to the bucket.
+        ///
+        /// [`WayMember`]: struct.WayMember.html
         #[inline]
         pub fn add_way_member<'b>(
             &'b mut self,
@@ -2344,6 +2362,9 @@ archive Osm
                 &mut self.data[1 + old_len - flatdata::PADDING_SIZE..],
             )
         }
+        /// Adds data of the type [`RelationMember`] to the bucket.
+        ///
+        /// [`RelationMember`]: struct.RelationMember.html
         #[inline]
         pub fn add_relation_member<'b>(
             &'b mut self,
@@ -2358,6 +2379,28 @@ archive Osm
         }
     }
 
+    /// Variadic struct attached to the [`relation_members`] archive resource.
+    ///
+    /// It unifies the following data types:
+    //
+    /// * [`NodeMember`]
+    /// * [`WayMember`]
+    /// * [`RelationMember`]
+    ///
+    /// ## Access pattern
+    ///
+    /// This structure is used as a template parameter in [`relation_members`] multivector/
+    /// multiarray view. It does not contain any data, instead it references
+    ///
+    /// * [`RelationMembersRef`] for the read-only heterogeneous access, and
+    /// * [`RelationMembersBuilder`] for the mutable builder pattern access.
+    ///
+    /// [`relation_members`]: struct.Archive{.osm.Osm}.html#method.relation_members
+    /// [`RelationMembersRef`]: enum.RelationMembersRef.html
+    /// [`RelationMembersBuilder`]: struct.RelationMembersBuilder.html
+    /// [`NodeMember`]: struct.NodeMember.html
+    /// [`WayMember`]: struct.WayMember.html
+    /// [`RelationMember`]: struct.RelationMember.html
     #[derive(Clone)]
     pub struct RelationMembers {}
 
