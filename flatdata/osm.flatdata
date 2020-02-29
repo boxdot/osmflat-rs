@@ -1,3 +1,5 @@
+/// OSM data types and archive
+
 namespace osm {
 
 // Max 40 bits value used to indicate null references.
