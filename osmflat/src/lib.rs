@@ -1,4 +1,5 @@
 #![deny(missing_docs)]
+#![allow(clippy::all)] // generated code is not clippy friendly
 
 //! Flat OpenStreetMap (OSM) data format providing an efficient *random* data
 //! access through [memory mapped files].
