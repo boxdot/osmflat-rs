@@ -447,7 +447,6 @@ archive Osm
             }
         }
     }
-
     /// Special value which represents an invalid index.
     pub const INVALID_IDX: u64 = 1_099_511_627_775;
 
@@ -515,60 +514,70 @@ archive Osm
             let value = flatdata_read_bytes!(i64, self.data, 0, 40);
             unsafe { std::mem::transmute::<i64, i64>(value) }
         }
+
         /// Bounding box (max longitude scaled with `COORD_SCALE`)
         #[inline]
         pub fn bbox_right(&self) -> i64 {
             let value = flatdata_read_bytes!(i64, self.data, 40, 40);
             unsafe { std::mem::transmute::<i64, i64>(value) }
         }
+
         /// Bounding box (max latitude scaled with `COORD_SCALE`)
         #[inline]
         pub fn bbox_top(&self) -> i64 {
             let value = flatdata_read_bytes!(i64, self.data, 80, 40);
             unsafe { std::mem::transmute::<i64, i64>(value) }
         }
+
         /// Bounding box (min latitude scaled with `COORD_SCALE`)
         #[inline]
         pub fn bbox_bottom(&self) -> i64 {
             let value = flatdata_read_bytes!(i64, self.data, 120, 40);
             unsafe { std::mem::transmute::<i64, i64>(value) }
         }
+
         /// Reference to the first required feature in `stringtable`.
         #[inline]
         pub fn required_feature_first_idx(&self) -> u64 {
             let value = flatdata_read_bytes!(u64, self.data, 160, 40);
             unsafe { std::mem::transmute::<u64, u64>(value) }
         }
+
         /// Number of required features.
         #[inline]
         pub fn required_features_size(&self) -> u32 {
             let value = flatdata_read_bytes!(u32, self.data, 200, 4);
             unsafe { std::mem::transmute::<u32, u32>(value) }
         }
+
         /// Reference to the first optional feature in `stringtable`.
         #[inline]
         pub fn optional_feature_first_idx(&self) -> u64 {
             let value = flatdata_read_bytes!(u64, self.data, 204, 40);
             unsafe { std::mem::transmute::<u64, u64>(value) }
         }
+
         /// Number of optional features.
         #[inline]
         pub fn optional_features_size(&self) -> u32 {
             let value = flatdata_read_bytes!(u32, self.data, 244, 4);
             unsafe { std::mem::transmute::<u32, u32>(value) }
         }
+
         /// Writing program used to write the data (reference to `stringtable`).
         #[inline]
         pub fn writingprogram_idx(&self) -> u64 {
             let value = flatdata_read_bytes!(u64, self.data, 248, 40);
             unsafe { std::mem::transmute::<u64, u64>(value) }
         }
+
         /// The origin (source) of the data.
         #[inline]
         pub fn source_idx(&self) -> u64 {
             let value = flatdata_read_bytes!(u64, self.data, 288, 40);
             unsafe { std::mem::transmute::<u64, u64>(value) }
         }
+
         /// Replication timestamp, expressed in seconds since the epoch.
         /// See [`state.txt`].
         ///
@@ -578,6 +587,7 @@ archive Osm
             let value = flatdata_read_bytes!(i64, self.data, 328, 64);
             unsafe { std::mem::transmute::<i64, i64>(value) }
         }
+
         /// Replication sequence number (`sequenceNumber` from [`state.txt`]).
         ///
         /// [`state.txt`]: https://wiki.openstreetmap.org/wiki/Planet.osm/diffs#Minute.2C_Hour.2C_and_Day_Files_Organisation
@@ -586,6 +596,7 @@ archive Osm
             let value = flatdata_read_bytes!(i64, self.data, 392, 64);
             unsafe { std::mem::transmute::<i64, i64>(value) }
         }
+
         /// Replication base URL (reference to `stringtable`).
         #[inline]
         pub fn osmosis_replication_base_url_idx(&self) -> u64 {
@@ -942,6 +953,7 @@ archive Osm
             let value = flatdata_read_bytes!(u64, self.data, 0, 40);
             unsafe { std::mem::transmute::<u64, u64>(value) }
         }
+
         /// Value index in `stringtable`
         #[inline]
         pub fn value_idx(&self) -> u64 {
@@ -1088,18 +1100,21 @@ archive Osm
             let value = flatdata_read_bytes!(i64, self.data, 0, 40);
             unsafe { std::mem::transmute::<i64, i64>(value) }
         }
+
         /// Latitude (scaled with `COORD_SCALE`).
         #[inline]
         pub fn lat(&self) -> i64 {
             let value = flatdata_read_bytes!(i64, self.data, 40, 40);
             unsafe { std::mem::transmute::<i64, i64>(value) }
         }
+
         /// Longitude (scaled with `COORD_SCALE`).
         #[inline]
         pub fn lon(&self) -> i64 {
             let value = flatdata_read_bytes!(i64, self.data, 80, 40);
             unsafe { std::mem::transmute::<i64, i64>(value) }
         }
+
         /// First element of the range [`tags`].
         ///
         /// [`tags`]: #method.tags
@@ -1108,6 +1123,7 @@ archive Osm
             let value = flatdata_read_bytes!(u64, self.data, 120, 40);
             unsafe { std::mem::transmute::<u64, u64>(value) }
         }
+
         /// Range of tags attached to this node.
         ///
         /// The values of the range are indexes in the `tags_index` vector.
@@ -1414,6 +1430,7 @@ archive Osm
             let value = flatdata_read_bytes!(i64, self.data, 0, 40);
             unsafe { std::mem::transmute::<i64, i64>(value) }
         }
+
         /// First element of the range [`tags`].
         ///
         /// [`tags`]: #method.tags
@@ -1422,6 +1439,7 @@ archive Osm
             let value = flatdata_read_bytes!(u64, self.data, 40, 40);
             unsafe { std::mem::transmute::<u64, u64>(value) }
         }
+
         /// Range of tags attached to this node.
         ///
         /// The values of the range are indexes in the `tags_index` vector.
@@ -1440,6 +1458,7 @@ archive Osm
             let value = flatdata_read_bytes!(u64, self.data, 80, 40);
             unsafe { std::mem::transmute::<u64, u64>(value) }
         }
+
         /// Range of nodes this way consists of.
         ///
         /// The values of the range are indexes in the `nodes_index` vector.
@@ -1731,6 +1750,7 @@ archive Osm
             let value = flatdata_read_bytes!(u64, self.data, 0, 40);
             unsafe { std::mem::transmute::<u64, u64>(value) }
         }
+
         /// Optional textual field describing the function of the node in the relation.
         ///
         /// Index in `stringtable`.
@@ -1879,6 +1899,7 @@ archive Osm
             let value = flatdata_read_bytes!(u64, self.data, 0, 40);
             unsafe { std::mem::transmute::<u64, u64>(value) }
         }
+
         /// Optional textual field describing the function of the way in the relation.
         ///
         /// Index in `stringtable`.
@@ -2027,6 +2048,7 @@ archive Osm
             let value = flatdata_read_bytes!(u64, self.data, 0, 40);
             unsafe { std::mem::transmute::<u64, u64>(value) }
         }
+
         /// Optional textual field describing the function of the relation in the parent relation.
         ///
         /// Index in `stringtable`.
@@ -2175,6 +2197,7 @@ archive Osm
             let value = flatdata_read_bytes!(i64, self.data, 0, 40);
             unsafe { std::mem::transmute::<i64, i64>(value) }
         }
+
         /// First element of the range [`tags`].
         ///
         /// [`tags`]: #method.tags
@@ -2183,6 +2206,7 @@ archive Osm
             let value = flatdata_read_bytes!(u64, self.data, 40, 40);
             unsafe { std::mem::transmute::<u64, u64>(value) }
         }
+
         /// Range of tags attached to this relation.
         ///
         /// The values of the range are indexes in the `tags` vector.
@@ -2945,6 +2969,7 @@ pub mod _builtin {
                 let value = flatdata_read_bytes!(u64, self.data, 0, 40);
                 unsafe { std::mem::transmute::<u64, u64>(value) }
             }
+
             #[inline]
             pub fn range(&self) -> std::ops::Range<u64> {
                 let start = flatdata_read_bytes!(u64, self.data, 0, 40);
