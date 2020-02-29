@@ -508,105 +508,84 @@ archive Osm
     impl flatdata::NoOverlap for Header {}
 
     impl<'a> HeaderRef<'a> {
-        /// First element of the range [`None`].
-        ///
-        /// [`None`]: #method.None
+        /// Bounding box (min longitude)
         #[inline]
         pub fn bbox_left(&self) -> i64 {
             let value = flatdata_read_bytes!(i64, self.data, 0, 40);
             unsafe { std::mem::transmute::<i64, i64>(value) }
         }
-        /// First element of the range [`None`].
-        ///
-        /// [`None`]: #method.None
+        /// Bounding box (max longitude)
         #[inline]
         pub fn bbox_right(&self) -> i64 {
             let value = flatdata_read_bytes!(i64, self.data, 40, 40);
             unsafe { std::mem::transmute::<i64, i64>(value) }
         }
-        /// First element of the range [`None`].
-        ///
-        /// [`None`]: #method.None
+        /// Bounding box (max latitude)
         #[inline]
         pub fn bbox_top(&self) -> i64 {
             let value = flatdata_read_bytes!(i64, self.data, 80, 40);
             unsafe { std::mem::transmute::<i64, i64>(value) }
         }
-        /// First element of the range [`None`].
-        ///
-        /// [`None`]: #method.None
+        /// Bounding box (min latitude)
         #[inline]
         pub fn bbox_bottom(&self) -> i64 {
             let value = flatdata_read_bytes!(i64, self.data, 120, 40);
             unsafe { std::mem::transmute::<i64, i64>(value) }
         }
-        /// First element of the range [`None`].
-        ///
-        /// [`None`]: #method.None
+        /// Reference to the first required feature in `stringtable`.
         #[inline]
         pub fn required_feature_first_idx(&self) -> u64 {
             let value = flatdata_read_bytes!(u64, self.data, 160, 40);
             unsafe { std::mem::transmute::<u64, u64>(value) }
         }
-        /// First element of the range [`None`].
-        ///
-        /// [`None`]: #method.None
+        /// Number of required features.
         #[inline]
         pub fn required_features_size(&self) -> u32 {
             let value = flatdata_read_bytes!(u32, self.data, 200, 4);
             unsafe { std::mem::transmute::<u32, u32>(value) }
         }
-        /// First element of the range [`None`].
-        ///
-        /// [`None`]: #method.None
+        /// Reference to the first optional feature in `stringtable`.
         #[inline]
         pub fn optional_feature_first_idx(&self) -> u64 {
             let value = flatdata_read_bytes!(u64, self.data, 204, 40);
             unsafe { std::mem::transmute::<u64, u64>(value) }
         }
-        /// First element of the range [`None`].
-        ///
-        /// [`None`]: #method.None
+        /// Number of optional features.
         #[inline]
         pub fn optional_features_size(&self) -> u32 {
             let value = flatdata_read_bytes!(u32, self.data, 244, 4);
             unsafe { std::mem::transmute::<u32, u32>(value) }
         }
-        /// First element of the range [`None`].
-        ///
-        /// [`None`]: #method.None
+        /// Writing program used to write the data (reference to `stringtable`).
         #[inline]
         pub fn writingprogram_idx(&self) -> u64 {
             let value = flatdata_read_bytes!(u64, self.data, 248, 40);
             unsafe { std::mem::transmute::<u64, u64>(value) }
         }
-        /// First element of the range [`None`].
-        ///
-        /// [`None`]: #method.None
+        /// The origin (source) of the data.
         #[inline]
         pub fn source_idx(&self) -> u64 {
             let value = flatdata_read_bytes!(u64, self.data, 288, 40);
             unsafe { std::mem::transmute::<u64, u64>(value) }
         }
-        /// First element of the range [`None`].
+        /// Replication timestamp, expressed in seconds since the epoch.
+        /// See [`state.txt`].
         ///
-        /// [`None`]: #method.None
+        /// [`state.txt`]: https://wiki.openstreetmap.org/wiki/Planet.osm/diffs#Minute.2C_Hour.2C_and_Day_Files_Organisation
         #[inline]
         pub fn osmosis_replication_timestamp(&self) -> i64 {
             let value = flatdata_read_bytes!(i64, self.data, 328, 64);
             unsafe { std::mem::transmute::<i64, i64>(value) }
         }
-        /// First element of the range [`None`].
+        /// Replication sequence number (`sequenceNumber` from [`state.txt`]).
         ///
-        /// [`None`]: #method.None
+        /// [`state.txt`]: https://wiki.openstreetmap.org/wiki/Planet.osm/diffs#Minute.2C_Hour.2C_and_Day_Files_Organisation
         #[inline]
         pub fn osmosis_replication_sequence_number(&self) -> i64 {
             let value = flatdata_read_bytes!(i64, self.data, 392, 64);
             unsafe { std::mem::transmute::<i64, i64>(value) }
         }
-        /// First element of the range [`None`].
-        ///
-        /// [`None`]: #method.None
+        /// Replication base URL (reference to `stringtable`).
         #[inline]
         pub fn osmosis_replication_base_url_idx(&self) -> u64 {
             let value = flatdata_read_bytes!(u64, self.data, 456, 40);
@@ -681,195 +660,187 @@ archive Osm
     }
 
     impl<'a> HeaderMut<'a> {
-        /// First element of the range [`None`].
-        ///
-        /// [`None`]: struct.HeaderRef.html#method.None
+        /// Bounding box (min longitude)
         #[inline]
         pub fn bbox_left(&self) -> i64 {
             let value = flatdata_read_bytes!(i64, self.data, 0, 40);
             unsafe { std::mem::transmute::<i64, i64>(value) }
         }
 
+        #[allow(missing_docs)]
         #[inline]
         pub fn set_bbox_left(&mut self, value: i64) {
             let buffer = unsafe { std::slice::from_raw_parts_mut(self.data, 62) };
             flatdata_write_bytes!(i64; value, buffer, 0, 40)
         }
 
-        /// First element of the range [`None`].
-        ///
-        /// [`None`]: struct.HeaderRef.html#method.None
+        /// Bounding box (max longitude)
         #[inline]
         pub fn bbox_right(&self) -> i64 {
             let value = flatdata_read_bytes!(i64, self.data, 40, 40);
             unsafe { std::mem::transmute::<i64, i64>(value) }
         }
 
+        #[allow(missing_docs)]
         #[inline]
         pub fn set_bbox_right(&mut self, value: i64) {
             let buffer = unsafe { std::slice::from_raw_parts_mut(self.data, 62) };
             flatdata_write_bytes!(i64; value, buffer, 40, 40)
         }
 
-        /// First element of the range [`None`].
-        ///
-        /// [`None`]: struct.HeaderRef.html#method.None
+        /// Bounding box (max latitude)
         #[inline]
         pub fn bbox_top(&self) -> i64 {
             let value = flatdata_read_bytes!(i64, self.data, 80, 40);
             unsafe { std::mem::transmute::<i64, i64>(value) }
         }
 
+        #[allow(missing_docs)]
         #[inline]
         pub fn set_bbox_top(&mut self, value: i64) {
             let buffer = unsafe { std::slice::from_raw_parts_mut(self.data, 62) };
             flatdata_write_bytes!(i64; value, buffer, 80, 40)
         }
 
-        /// First element of the range [`None`].
-        ///
-        /// [`None`]: struct.HeaderRef.html#method.None
+        /// Bounding box (min latitude)
         #[inline]
         pub fn bbox_bottom(&self) -> i64 {
             let value = flatdata_read_bytes!(i64, self.data, 120, 40);
             unsafe { std::mem::transmute::<i64, i64>(value) }
         }
 
+        #[allow(missing_docs)]
         #[inline]
         pub fn set_bbox_bottom(&mut self, value: i64) {
             let buffer = unsafe { std::slice::from_raw_parts_mut(self.data, 62) };
             flatdata_write_bytes!(i64; value, buffer, 120, 40)
         }
 
-        /// First element of the range [`None`].
-        ///
-        /// [`None`]: struct.HeaderRef.html#method.None
+        /// Reference to the first required feature in `stringtable`.
         #[inline]
         pub fn required_feature_first_idx(&self) -> u64 {
             let value = flatdata_read_bytes!(u64, self.data, 160, 40);
             unsafe { std::mem::transmute::<u64, u64>(value) }
         }
 
+        #[allow(missing_docs)]
         #[inline]
         pub fn set_required_feature_first_idx(&mut self, value: u64) {
             let buffer = unsafe { std::slice::from_raw_parts_mut(self.data, 62) };
             flatdata_write_bytes!(u64; value, buffer, 160, 40)
         }
 
-        /// First element of the range [`None`].
-        ///
-        /// [`None`]: struct.HeaderRef.html#method.None
+        /// Number of required features.
         #[inline]
         pub fn required_features_size(&self) -> u32 {
             let value = flatdata_read_bytes!(u32, self.data, 200, 4);
             unsafe { std::mem::transmute::<u32, u32>(value) }
         }
 
+        #[allow(missing_docs)]
         #[inline]
         pub fn set_required_features_size(&mut self, value: u32) {
             let buffer = unsafe { std::slice::from_raw_parts_mut(self.data, 62) };
             flatdata_write_bytes!(u32; value, buffer, 200, 4)
         }
 
-        /// First element of the range [`None`].
-        ///
-        /// [`None`]: struct.HeaderRef.html#method.None
+        /// Reference to the first optional feature in `stringtable`.
         #[inline]
         pub fn optional_feature_first_idx(&self) -> u64 {
             let value = flatdata_read_bytes!(u64, self.data, 204, 40);
             unsafe { std::mem::transmute::<u64, u64>(value) }
         }
 
+        #[allow(missing_docs)]
         #[inline]
         pub fn set_optional_feature_first_idx(&mut self, value: u64) {
             let buffer = unsafe { std::slice::from_raw_parts_mut(self.data, 62) };
             flatdata_write_bytes!(u64; value, buffer, 204, 40)
         }
 
-        /// First element of the range [`None`].
-        ///
-        /// [`None`]: struct.HeaderRef.html#method.None
+        /// Number of optional features.
         #[inline]
         pub fn optional_features_size(&self) -> u32 {
             let value = flatdata_read_bytes!(u32, self.data, 244, 4);
             unsafe { std::mem::transmute::<u32, u32>(value) }
         }
 
+        #[allow(missing_docs)]
         #[inline]
         pub fn set_optional_features_size(&mut self, value: u32) {
             let buffer = unsafe { std::slice::from_raw_parts_mut(self.data, 62) };
             flatdata_write_bytes!(u32; value, buffer, 244, 4)
         }
 
-        /// First element of the range [`None`].
-        ///
-        /// [`None`]: struct.HeaderRef.html#method.None
+        /// Writing program used to write the data (reference to `stringtable`).
         #[inline]
         pub fn writingprogram_idx(&self) -> u64 {
             let value = flatdata_read_bytes!(u64, self.data, 248, 40);
             unsafe { std::mem::transmute::<u64, u64>(value) }
         }
 
+        #[allow(missing_docs)]
         #[inline]
         pub fn set_writingprogram_idx(&mut self, value: u64) {
             let buffer = unsafe { std::slice::from_raw_parts_mut(self.data, 62) };
             flatdata_write_bytes!(u64; value, buffer, 248, 40)
         }
 
-        /// First element of the range [`None`].
-        ///
-        /// [`None`]: struct.HeaderRef.html#method.None
+        /// The origin (source) of the data.
         #[inline]
         pub fn source_idx(&self) -> u64 {
             let value = flatdata_read_bytes!(u64, self.data, 288, 40);
             unsafe { std::mem::transmute::<u64, u64>(value) }
         }
 
+        #[allow(missing_docs)]
         #[inline]
         pub fn set_source_idx(&mut self, value: u64) {
             let buffer = unsafe { std::slice::from_raw_parts_mut(self.data, 62) };
             flatdata_write_bytes!(u64; value, buffer, 288, 40)
         }
 
-        /// First element of the range [`None`].
+        /// Replication timestamp, expressed in seconds since the epoch.
+        /// See [`state.txt`].
         ///
-        /// [`None`]: struct.HeaderRef.html#method.None
+        /// [`state.txt`]: https://wiki.openstreetmap.org/wiki/Planet.osm/diffs#Minute.2C_Hour.2C_and_Day_Files_Organisation
         #[inline]
         pub fn osmosis_replication_timestamp(&self) -> i64 {
             let value = flatdata_read_bytes!(i64, self.data, 328, 64);
             unsafe { std::mem::transmute::<i64, i64>(value) }
         }
 
+        #[allow(missing_docs)]
         #[inline]
         pub fn set_osmosis_replication_timestamp(&mut self, value: i64) {
             let buffer = unsafe { std::slice::from_raw_parts_mut(self.data, 62) };
             flatdata_write_bytes!(i64; value, buffer, 328, 64)
         }
 
-        /// First element of the range [`None`].
+        /// Replication sequence number (`sequenceNumber` from [`state.txt`]).
         ///
-        /// [`None`]: struct.HeaderRef.html#method.None
+        /// [`state.txt`]: https://wiki.openstreetmap.org/wiki/Planet.osm/diffs#Minute.2C_Hour.2C_and_Day_Files_Organisation
         #[inline]
         pub fn osmosis_replication_sequence_number(&self) -> i64 {
             let value = flatdata_read_bytes!(i64, self.data, 392, 64);
             unsafe { std::mem::transmute::<i64, i64>(value) }
         }
 
+        #[allow(missing_docs)]
         #[inline]
         pub fn set_osmosis_replication_sequence_number(&mut self, value: i64) {
             let buffer = unsafe { std::slice::from_raw_parts_mut(self.data, 62) };
             flatdata_write_bytes!(i64; value, buffer, 392, 64)
         }
 
-        /// First element of the range [`None`].
-        ///
-        /// [`None`]: struct.HeaderRef.html#method.None
+        /// Replication base URL (reference to `stringtable`).
         #[inline]
         pub fn osmosis_replication_base_url_idx(&self) -> u64 {
             let value = flatdata_read_bytes!(u64, self.data, 456, 40);
             unsafe { std::mem::transmute::<u64, u64>(value) }
         }
 
+        #[allow(missing_docs)]
         #[inline]
         pub fn set_osmosis_replication_base_url_idx(&mut self, value: u64) {
             let buffer = unsafe { std::slice::from_raw_parts_mut(self.data, 62) };
@@ -1012,6 +983,7 @@ archive Osm
             unsafe { std::mem::transmute::<u64, u64>(value) }
         }
 
+        #[allow(missing_docs)]
         #[inline]
         pub fn set_key_idx(&mut self, value: u64) {
             let buffer = unsafe { std::slice::from_raw_parts_mut(self.data, 10) };
@@ -1025,6 +997,7 @@ archive Osm
             unsafe { std::mem::transmute::<u64, u64>(value) }
         }
 
+        #[allow(missing_docs)]
         #[inline]
         pub fn set_value_idx(&mut self, value: u64) {
             let buffer = unsafe { std::slice::from_raw_parts_mut(self.data, 10) };
@@ -1184,6 +1157,7 @@ archive Osm
             unsafe { std::mem::transmute::<i64, i64>(value) }
         }
 
+        #[allow(missing_docs)]
         #[inline]
         pub fn set_id(&mut self, value: i64) {
             let buffer = unsafe { std::slice::from_raw_parts_mut(self.data, 20) };
@@ -1197,6 +1171,7 @@ archive Osm
             unsafe { std::mem::transmute::<i64, i64>(value) }
         }
 
+        #[allow(missing_docs)]
         #[inline]
         pub fn set_lat(&mut self, value: i64) {
             let buffer = unsafe { std::slice::from_raw_parts_mut(self.data, 20) };
@@ -1210,6 +1185,7 @@ archive Osm
             unsafe { std::mem::transmute::<i64, i64>(value) }
         }
 
+        #[allow(missing_docs)]
         #[inline]
         pub fn set_lon(&mut self, value: i64) {
             let buffer = unsafe { std::slice::from_raw_parts_mut(self.data, 20) };
@@ -1225,6 +1201,7 @@ archive Osm
             unsafe { std::mem::transmute::<u64, u64>(value) }
         }
 
+        #[allow(missing_docs)]
         #[inline]
         pub fn set_tag_first_idx(&mut self, value: u64) {
             let buffer = unsafe { std::slice::from_raw_parts_mut(self.data, 20) };
@@ -1349,6 +1326,7 @@ archive Osm
             unsafe { std::mem::transmute::<u64, u64>(value) }
         }
 
+        #[allow(missing_docs)]
         #[inline]
         pub fn set_value(&mut self, value: u64) {
             let buffer = unsafe { std::slice::from_raw_parts_mut(self.data, 5) };
@@ -1509,6 +1487,7 @@ archive Osm
             unsafe { std::mem::transmute::<i64, i64>(value) }
         }
 
+        #[allow(missing_docs)]
         #[inline]
         pub fn set_id(&mut self, value: i64) {
             let buffer = unsafe { std::slice::from_raw_parts_mut(self.data, 15) };
@@ -1524,6 +1503,7 @@ archive Osm
             unsafe { std::mem::transmute::<u64, u64>(value) }
         }
 
+        #[allow(missing_docs)]
         #[inline]
         pub fn set_tag_first_idx(&mut self, value: u64) {
             let buffer = unsafe { std::slice::from_raw_parts_mut(self.data, 15) };
@@ -1539,6 +1519,7 @@ archive Osm
             unsafe { std::mem::transmute::<u64, u64>(value) }
         }
 
+        #[allow(missing_docs)]
         #[inline]
         pub fn set_ref_first_idx(&mut self, value: u64) {
             let buffer = unsafe { std::slice::from_raw_parts_mut(self.data, 15) };
@@ -1662,6 +1643,7 @@ archive Osm
             unsafe { std::mem::transmute::<u64, u64>(value) }
         }
 
+        #[allow(missing_docs)]
         #[inline]
         pub fn set_value(&mut self, value: u64) {
             let buffer = unsafe { std::slice::from_raw_parts_mut(self.data, 5) };
@@ -1792,6 +1774,7 @@ archive Osm
             unsafe { std::mem::transmute::<u64, u64>(value) }
         }
 
+        #[allow(missing_docs)]
         #[inline]
         pub fn set_node_idx(&mut self, value: u64) {
             let buffer = unsafe { std::slice::from_raw_parts_mut(self.data, 10) };
@@ -1807,6 +1790,7 @@ archive Osm
             unsafe { std::mem::transmute::<u64, u64>(value) }
         }
 
+        #[allow(missing_docs)]
         #[inline]
         pub fn set_role_idx(&mut self, value: u64) {
             let buffer = unsafe { std::slice::from_raw_parts_mut(self.data, 10) };
@@ -1938,6 +1922,7 @@ archive Osm
             unsafe { std::mem::transmute::<u64, u64>(value) }
         }
 
+        #[allow(missing_docs)]
         #[inline]
         pub fn set_way_idx(&mut self, value: u64) {
             let buffer = unsafe { std::slice::from_raw_parts_mut(self.data, 10) };
@@ -1953,6 +1938,7 @@ archive Osm
             unsafe { std::mem::transmute::<u64, u64>(value) }
         }
 
+        #[allow(missing_docs)]
         #[inline]
         pub fn set_role_idx(&mut self, value: u64) {
             let buffer = unsafe { std::slice::from_raw_parts_mut(self.data, 10) };
@@ -2084,6 +2070,7 @@ archive Osm
             unsafe { std::mem::transmute::<u64, u64>(value) }
         }
 
+        #[allow(missing_docs)]
         #[inline]
         pub fn set_relation_idx(&mut self, value: u64) {
             let buffer = unsafe { std::slice::from_raw_parts_mut(self.data, 10) };
@@ -2099,6 +2086,7 @@ archive Osm
             unsafe { std::mem::transmute::<u64, u64>(value) }
         }
 
+        #[allow(missing_docs)]
         #[inline]
         pub fn set_role_idx(&mut self, value: u64) {
             let buffer = unsafe { std::slice::from_raw_parts_mut(self.data, 10) };
@@ -2239,6 +2227,7 @@ archive Osm
             unsafe { std::mem::transmute::<i64, i64>(value) }
         }
 
+        #[allow(missing_docs)]
         #[inline]
         pub fn set_id(&mut self, value: i64) {
             let buffer = unsafe { std::slice::from_raw_parts_mut(self.data, 10) };
@@ -2254,6 +2243,7 @@ archive Osm
             unsafe { std::mem::transmute::<u64, u64>(value) }
         }
 
+        #[allow(missing_docs)]
         #[inline]
         pub fn set_tag_first_idx(&mut self, value: u64) {
             let buffer = unsafe { std::slice::from_raw_parts_mut(self.data, 10) };
@@ -2997,6 +2987,7 @@ pub mod _builtin {
                 unsafe { std::mem::transmute::<u64, u64>(value) }
             }
 
+            #[allow(missing_docs)]
             #[inline]
             pub fn set_value(&mut self, value: u64) {
                 let buffer = unsafe { std::slice::from_raw_parts_mut(self.data, 5) };

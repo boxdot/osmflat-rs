@@ -1,3 +1,5 @@
+#![deny(missing_docs)]
+
 //! Flat OpenStreetMap (OSM) data format providing an efficient *random* data
 //! access through [memory mapped files].
 //!
@@ -31,8 +33,6 @@
 //! [memory mapped files]: https://en.wikipedia.org/wiki/Memory-mapped_file
 //! [`osmflatc`]: https://github.com/boxdot/osmflat-rs/tree/master/osmflatc
 //! [examples]: https://github.com/boxdot/osmflat-rs/tree/master/osmflat/examples
-
-#![allow(clippy::all)]
 
 #[macro_use]
 extern crate flatdata;

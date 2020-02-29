@@ -15,21 +15,45 @@ const u64 COORD_SCALE = 1000000000;
  * Metadata attached to the archive.
  */
 struct Header {
+    /// Bounding box (min longitude scaled with `COORD_SCALE`)
     bbox_left: i64 : 40;
+    /// Bounding box (max longitude scaled with `COORD_SCALE`)
     bbox_right: i64 : 40;
+    /// Bounding box (max latitude scaled with `COORD_SCALE`)
     bbox_top: i64 : 40;
+    /// Bounding box (min latitude scaled with `COORD_SCALE`)
     bbox_bottom: i64 : 40;
 
+    /// Reference to the first required feature in `stringtable`.
     required_feature_first_idx: u64 : 40;
+    /// Number of required features.
     required_features_size: u32 : 4;
+    /// Reference to the first optional feature in `stringtable`.
     optional_feature_first_idx: u64 : 40;
+    /// Number of optional features.
     optional_features_size: u32 : 4;
 
+    /// Writing program used to write the data (reference to `stringtable`).
     writingprogram_idx: u64 : 40;
+    /// The origin (source) of the data.
     source_idx: u64 : 40;
 
+    /**
+     * Replication timestamp, expressed in seconds since the epoch.
+     * See [`state.txt`].
+     *
+     * [`state.txt`]: https://wiki.openstreetmap.org/wiki/Planet.osm/diffs#Minute.2C_Hour.2C_and_Day_Files_Organisation
+     */
     osmosis_replication_timestamp: i64 : 64;
+    /**
+     * Replication sequence number (`sequenceNumber` from [`state.txt`]).
+     *
+     * [`state.txt`]: https://wiki.openstreetmap.org/wiki/Planet.osm/diffs#Minute.2C_Hour.2C_and_Day_Files_Organisation
+     */
     osmosis_replication_sequence_number: i64 : 64;
+    /**
+     * Replication base URL (reference to `stringtable`).
+     */
     osmosis_replication_base_url_idx: u64 : 40;
 }
 
