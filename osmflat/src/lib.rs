@@ -14,7 +14,7 @@
 //! Open a flatdata archive (compiled from pbf with [`osmflatc`]) and iterate
 //! through nodes:
 //!
-//! ```rust,norun
+//! ```rust,no_run
 //! use osmflat::{Archive, FileResourceStorage, Osm};
 //!
 //! fn main() {
