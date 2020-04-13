@@ -18,7 +18,7 @@
 //! The code in this example file is released into the Public Domain.
 
 use osmflat::{
-    iter_tags, Archive, FileResourceStorage, NodeRef, Osm, RelationMembersRef, RelationRef, WayRef,
+    iter_tags, Archive, FileResourceStorage, Node, Osm, RelationMembersRef, Relation, Way,
     COORD_SCALE,
 };
 use smallvec::{smallvec, SmallVec};
@@ -59,8 +59,8 @@ impl GeoCoord {
 }
 
 /// Convert osmflat Node into GeoCoord.
-impl From<NodeRef<'_>> for GeoCoord {
-    fn from(node: NodeRef) -> Self {
+impl From<&Node> for GeoCoord {
+    fn from(node: &Node) -> Self {
         Self {
             lat: node.lat() as f64 / COORD_SCALE as f64,
             lon: node.lon() as f64 / COORD_SCALE as f64,
@@ -86,8 +86,8 @@ impl Polyline {
         let nodes_index = archive.nodes_index();
         let nodes = archive.nodes();
         let to_node = move |idx| {
-            let node_idx = nodes_index.at(idx as usize).value();
-            nodes.at(node_idx as usize).into()
+            let node_idx = nodes_index[idx as usize].value();
+            (&nodes[node_idx as usize]).into()
         };
         self.inner.into_iter().flatten().map(to_node)
     }
@@ -113,13 +113,13 @@ struct Feature {
 impl Feature {
     fn into_polyline(self, archive: &Osm) -> Polyline {
         match self.cat {
-            Category::Road | Category::River(_) => way_into_polyline(archive.ways().at(self.idx)),
+            Category::Road | Category::River(_) => way_into_polyline(&archive.ways()[self.idx]),
             Category::Park | Category::Water => multipolygon_into_polyline(&archive, self.idx),
         }
     }
 }
 
-fn way_into_polyline(way: WayRef) -> Polyline {
+fn way_into_polyline(way: &Way) -> Polyline {
     Polyline {
         inner: smallvec![way.refs()],
     }
@@ -134,7 +134,7 @@ fn multipolygon_into_polyline(archive: &Osm, idx: usize) -> Polyline {
             RelationMembersRef::WayMember(way_member)
                 if strings.substring(way_member.role_idx() as usize) == Ok("outer") =>
             {
-                Some(archive.ways().at(way_member.way_idx() as usize).refs())
+                Some(archive.ways()[way_member.way_idx() as usize].refs())
             }
             _ => None,
         })
@@ -154,7 +154,7 @@ fn classify<'a>(archive: &'a Osm) -> impl Iterator<Item = Feature> + 'a {
     ways.chain(rels)
 }
 
-fn classify_way(archive: &Osm, way: WayRef) -> Option<Category> {
+fn classify_way(archive: &Osm, way: &Way) -> Option<Category> {
     // Filter all ways that have less than 2 nodes.
     if way.refs().end <= way.refs().start + 2 {
         return None;
@@ -193,7 +193,7 @@ fn classify_way(archive: &Osm, way: WayRef) -> Option<Category> {
     None
 }
 
-fn classify_relation(archive: &Osm, relation: RelationRef) -> Option<Category> {
+fn classify_relation(archive: &Osm, relation: &Relation) -> Option<Category> {
     let mut is_multipolygon = false;
     let mut is_park = false;
     let mut is_lake = false;

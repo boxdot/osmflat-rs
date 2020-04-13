@@ -4,7 +4,7 @@
 //!
 //! The code in this example file is released into the Public Domain.
 
-use osmflat::{find_tag_by, Archive, FileResourceStorage, NodeRef, Osm, WayRef, COORD_SCALE};
+use osmflat::{find_tag_by, Archive, FileResourceStorage, Node, Osm, Way, COORD_SCALE};
 
 use itertools::Itertools;
 use structopt::StructOpt;
@@ -22,8 +22,8 @@ struct GeoCoord {
 }
 
 /// Convert osmflat Node into GeoCoord.
-impl From<NodeRef<'_>> for GeoCoord {
-    fn from(node: NodeRef) -> Self {
+impl From<&Node> for GeoCoord {
+    fn from(node: &Node) -> Self {
         Self {
             lat: node.lat() as f64 / COORD_SCALE as f64,
             lon: node.lon() as f64 / COORD_SCALE as f64,
@@ -80,14 +80,14 @@ fn map_transform(
     }
 }
 
-fn way_coords<'a>(archive: &'a Osm, way: WayRef) -> impl Iterator<Item = GeoCoord> + 'a {
+fn way_coords<'a>(archive: &'a Osm, way: &Way) -> impl Iterator<Item = GeoCoord> + 'a {
     let nodes = archive.nodes();
     let nodes_index = archive.nodes_index();
     way.refs()
-        .map(move |i| nodes.at(nodes_index.at(i as usize).value() as usize).into())
+        .map(move |i| (&nodes[nodes_index[i as usize].value() as usize]).into())
 }
 
-fn way_filter(way: WayRef, archive: &Osm) -> bool {
+fn way_filter(way: &Way, archive: &Osm) -> bool {
     const UNWANTED_HIGHWAY_TYPES: [&[u8]; 9] = [
         b"pedestrian\0",
         b"steps\0",
@@ -110,7 +110,7 @@ fn way_filter(way: WayRef, archive: &Osm) -> bool {
     .is_some()
 }
 
-fn roads(archive: &Osm) -> impl Iterator<Item = WayRef> {
+fn roads(archive: &Osm) -> impl Iterator<Item = &Way> {
     archive
         .ways()
         .iter()

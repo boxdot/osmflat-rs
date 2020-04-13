@@ -12,7 +12,7 @@
 //!
 //! The code in this example file is released into the Public Domain.
 
-use osmflat::{Archive, FileResourceStorage, NodeRef, Osm};
+use osmflat::{Archive, FileResourceStorage, Node, Osm};
 
 struct Coords {
     lat: f64,
@@ -20,7 +20,7 @@ struct Coords {
 }
 
 impl Coords {
-    fn from_node(node: NodeRef) -> Self {
+    fn from_node(node: &Node) -> Self {
         Self {
             lat: node.lat() as f64 / osmflat::COORD_SCALE as f64,
             lon: node.lon() as f64 / osmflat::COORD_SCALE as f64,
@@ -55,7 +55,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // A way reference a range of tags by storing a contiguous range of
             // indexes in `tags_index`. Each of these references a tag in `tags`.
             // This is a common pattern when flattening 1 to n relations.
-            let tag = tags.at(tags_index.at(idx as usize).value() as usize);
+            let tag = &tags[tags_index[idx as usize].value() as usize];
             strings.substring_raw(tag.key_idx() as usize) == b"highway"
         })
     });
@@ -68,7 +68,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // A way references a range of nodes by storing a contiguous range of
             // indexes in `nodes_index`. Each of these references a node in `nodes`.
             // This is a common pattern when flattening 1 to n relations.
-            Coords::from_node(nodes.at(nodes_index.at(idx as usize).value() as usize))
+            Coords::from_node(&nodes[nodes_index[idx as usize].value() as usize])
         });
         let length: f64 = coords
             .clone()

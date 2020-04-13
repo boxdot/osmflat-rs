@@ -16,7 +16,7 @@ pub fn iter_tags(archive: &Osm, range: Range<u64>) -> impl Iterator<Item = (&[u8
     let strings = archive.stringtable();
 
     range.map(move |idx| {
-        let tag = tags.at(tags_index.at(idx as usize).value() as usize);
+        let tag = &tags[tags_index[idx as usize].value() as usize];
         let key = strings.substring_raw(tag.key_idx() as usize);
         let val = strings.substring_raw(tag.value_idx() as usize);
         (key, val)
@@ -42,7 +42,7 @@ pub fn find_tag_by(
     let strings = archive.stringtable();
 
     range.find_map(move |idx| {
-        let tag = tags.at(tags_index.at(idx as usize).value() as usize);
+        let tag = &tags[tags_index[idx as usize].value() as usize];
         let key_block = &strings.as_bytes()[tag.key_idx() as usize..];
         let value_block = &strings.as_bytes()[tag.value_idx() as usize..];
         if predicate(key_block, value_block) {
@@ -75,7 +75,7 @@ pub fn has_tag(archive: &Osm, range: Range<u64>, key: &[u8], value: &[u8]) -> bo
     };
 
     for idx in range {
-        let tag = tags.at(tags_index.at(idx as usize).value() as usize);
+        let tag = &tags[tags_index[idx as usize].value() as usize];
         if matches(tag.key_idx(), key) {
             return matches(tag.value_idx(), value);
         }
