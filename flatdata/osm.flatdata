@@ -1,88 +1,216 @@
+/// OSM data types and archive
+
 namespace osm {
 
-// Max 40 bits value used to indicate null references
+// Max 40 bits value used to indicate null references.
+/**
+ * Special value which represents an invalid index.
+ */
 const u64 INVALID_IDX = 0xFFFFFFFFFF;
 
-// All coordinate were scaled by this to convert them to integers
+/**
+ * All coordinate are scaled by this constant to convert them to integers.
+ */
 const u64 COORD_SCALE = 1000000000;
 
+/**
+ * Metadata attached to the archive.
+ */
 struct Header {
+    /// Bounding box (min longitude scaled with `COORD_SCALE`)
     bbox_left: i64 : 40;
+    /// Bounding box (max longitude scaled with `COORD_SCALE`)
     bbox_right: i64 : 40;
+    /// Bounding box (max latitude scaled with `COORD_SCALE`)
     bbox_top: i64 : 40;
+    /// Bounding box (min latitude scaled with `COORD_SCALE`)
     bbox_bottom: i64 : 40;
 
+    /// Reference to the first required feature in `stringtable`.
     required_feature_first_idx: u64 : 40;
+    /// Number of required features.
     required_features_size: u32 : 4;
+    /// Reference to the first optional feature in `stringtable`.
     optional_feature_first_idx: u64 : 40;
+    /// Number of optional features.
     optional_features_size: u32 : 4;
 
+    /// Writing program used to write the data (reference to `stringtable`).
     writingprogram_idx: u64 : 40;
+    /// The origin (source) of the data.
     source_idx: u64 : 40;
 
+    /**
+     * Replication timestamp, expressed in seconds since the epoch.
+     * See [`state.txt`].
+     *
+     * [`state.txt`]: https://wiki.openstreetmap.org/wiki/Planet.osm/diffs#Minute.2C_Hour.2C_and_Day_Files_Organisation
+     */
     osmosis_replication_timestamp: i64 : 64;
+    /**
+     * Replication sequence number (`sequenceNumber` from [`state.txt`]).
+     *
+     * [`state.txt`]: https://wiki.openstreetmap.org/wiki/Planet.osm/diffs#Minute.2C_Hour.2C_and_Day_Files_Organisation
+     */
     osmosis_replication_sequence_number: i64 : 64;
+    /**
+     * Replication base URL (reference to `stringtable`).
+     */
     osmosis_replication_base_url_idx: u64 : 40;
 }
 
+/**
+ * A `(key, value)` attached to a `Node`, `Way`, or `Relation.
+ */
 struct Tag {
+    /// Key index in `stringtable`
     key_idx: u64 : 40;
+    /// Value index in `stringtable`
     value_idx: u64 : 40;
 }
 
+/**
+ * A node is one of the core elements in the OpenStreetMap data model.
+ *
+ * It consists of a single point in space defined by its latitude, longitude and node id.
+ *
+ * See <https://wiki.openstreetmap.org/wiki/Node>.
+ */
 struct Node {
+    /// Unique node ID
     id: i64 : 40;
+    /// Latitude (scaled with `COORD_SCALE`).
     lat: i64 : 40;
+    /// Longitude (scaled with `COORD_SCALE`).
     lon: i64 : 40;
+    /**
+     * Range of tags attached to this node.
+     *
+     * The values of the range are indexes in the `tags_index` vector.
+     */
     @range(tags)
     tag_first_idx: u64 : 40;
 }
 
 /**
- * A struct indexing a node.
+ * Index of a node.
  */
 struct NodeIndex {
+    /// Index in the `nodes` vector.
     value: u64 : 40;
 }
 
+/**
+ * A way is an ordered list of nodes.
+ *
+ * See https://wiki.openstreetmap.org/wiki/Way.
+ */
 struct Way {
+    /// Unique ID of the way.
     id: i64 : 40;
+    /**
+     * Range of tags attached to this node.
+     *
+     * The values of the range are indexes in the `tags_index` vector.
+     */
     @range(tags)
     tag_first_idx: u64 : 40;
+    /**
+     * Range of nodes this way consists of.
+     *
+     * The values of the range are indexes in the `nodes_index` vector.
+     */
     @range(refs)
     ref_first_idx: u64 : 40;
 }
 
 /**
- * A struct indexing a tag.
+ * Index of a tag.
  */
 struct TagIndex {
+    /// Index in the `tags` vector.
     value: u64 : 40;
 }
 
+/// Node member of a relation.
 struct NodeMember {
+    /// Index of the node in the `nodes` vector.
     node_idx: u64 : 40;
+    /**
+     * Optional textual field describing the function of the node in the relation.
+     *
+     * Index in `stringtable`.
+     */
     role_idx: u64 : 40;
 }
 
+/// Way member of a relation.
 struct WayMember {
+    /// Index of the way in the `ways` vector.
     way_idx: u64 : 40;
+    /**
+     * Optional textual field describing the function of the way in the relation.
+     *
+     * Index in `stringtable`.
+     */
     role_idx: u64 : 40;
 }
 
+/// Relation member of a relation.
 struct RelationMember {
+    /// Index of the relation in the `relations` vector.
     relation_idx: u64 : 40;
+    /**
+     * Optional textual field describing the function of the relation in the parent relation.
+     *
+     * Index in `stringtable`.
+     */
     role_idx: u64 : 40;
 }
 
+/**
+ * A relation is an ordered list of one or more nodes, ways and/or relations as members.
+ *
+ * See https://wiki.openstreetmap.org/wiki/Relation.
+ */
 struct Relation {
+    /// Unique ID of the relation.
     id: i64 : 40;
+    /**
+     * Range of tags attached to this relation.
+     *
+     * The values of the range are indexes in the `tags` vector.
+     */
     @range(tags)
     tag_first_idx: u64 : 40;
 }
 
+/**
+ * OSM data archive
+ *
+ * Relations and relation members are indexed with the same index, i.e.
+ * a relation at index `i` in the vector `relations` has the members
+ * at index `i` in the multivector `relation_members`.
+ *
+ * All 1:n relationships are modeled in-place by using an additional index. This is a
+ * common pattern in flatdata. For example, a node might have multiple tags attached
+ * to it. To model this, a node in `nodes` references the first tag attached to it
+ * by storing an index in the `tags_index` vector. The next node in `nodes` again
+ * references its first tag, which is the last tag (exclusive) of the previous node.
+ *
+ * ```text
+ * nodes:      [ ..., n_1, n_2, ... ]
+ *                     |    |
+ *                     |    +-------+
+ *                     v            v
+ * tags_index: [ ..., t_11, t_12, ..., t_1n, t_21, ... t_2m, ... ]
+ * ```
+ */
 @bound_implicitly(Relations: relations, relation_members)
 archive Osm {
+    /**
+     * Header which contains the metadata attached to the archive.
+     */
     @explicit_reference( Header.required_feature_first_idx, stringtable )
     @explicit_reference( Header.optional_feature_first_idx, stringtable )
     @explicit_reference( Header.writingprogram_idx, stringtable )
@@ -90,16 +218,48 @@ archive Osm {
     @explicit_reference( Header.osmosis_replication_base_url_idx, stringtable )
     header: Header;
 
+    /**
+     * List of nodes.
+     *
+     * A node references a range of tags in the `tags_index` vector.
+     */
     @explicit_reference( Node.tag_first_idx, tags_index )
     nodes: vector<Node>;
 
+    /**
+     * List of ways.
+     *
+     * A way references
+     *
+     * * a range of tags in the `tags_index` vector, and
+     * * a range of nodes in the `nodes_index` vector.
+     */
     @explicit_reference( Way.tag_first_idx, tags_index )
     @explicit_reference( Way.ref_first_idx, nodes_index )
     ways: vector<Way>;
 
+    /**
+     * List of relations.
+     *
+     * A relation references a range of tags in `tags_index` vectors.
+     * Members are attached to a relation implicitly: members that belong to a
+     * relation at index `i` are at index `i` in the `relation_members` multivector.
+     */
     @explicit_reference( Relation.tag_first_idx, tags_index )
     relations: vector<Relation>;
 
+    /**
+     * Members attached to relations.
+     *
+     * An index in this multivector corresponds to an index in the `relations` vector.
+     *
+     * A member has a variadic type: `NodeMember`, `WayMember` or `RelationMember`.
+     * Each type references its role in the `stringtable` raw data. Additionally,
+     *
+     * * a node member references a node in the `nodes` vector,
+     * * a way member references a way in the `ways` vector,
+     * * a relation member references a relation in the `relations` vector.
+     */
     @explicit_reference( NodeMember.node_idx, nodes )
     @explicit_reference( NodeMember.role_idx, stringtable )
     @explicit_reference( WayMember.way_idx, ways )
@@ -108,18 +268,30 @@ archive Osm {
     @explicit_reference( RelationMember.role_idx, stringtable )
     relation_members: multivector<40, NodeMember, WayMember, RelationMember>;
 
+    /**
+     * List of tags.
+     *
+     * A tag references its key and value in the `stringtable` raw data.
+     */
     @explicit_reference( Tag.key_idx, stringtable )
     @explicit_reference( Tag.value_idx, stringtable )
     tags: vector<Tag>;
 
+    /**
+     * Auxiliary index of tags to model 1:n relationships between nodes, ways, relations
+     * and tags.
+     */
     @explicit_reference( TagIndex.value, tags )
     tags_index: vector<TagIndex>;
 
+    /**
+     * Auxiliary index of nodes to model 1:n relationship between ways and nodes.
+     */
     @explicit_reference( NodeIndex.value, nodes )
     nodes_index: vector<NodeIndex>;
 
     /**
-     * List of strings separated by \0.
+     * List of strings separated by `\0`.
      */
     stringtable: raw_data;
 }
