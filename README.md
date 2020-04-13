@@ -1,6 +1,6 @@
 # osmflat ![][ci]
 
-![berlin-features](osmflat/examples/berlin-features.png)
+![berlin-features]
 
 Flat OpenStreetMap (OSM) data format providing an efficient *random* data
 access through [memory mapped files].
@@ -88,3 +88,4 @@ shall be dual licensed as above, without any additional terms or conditions.
 [latest-berlin-map]: http://download.geofabrik.de/europe/germany/berlin.html
 [OSM-binary]: https://github.com/scrosby/OSM-binary
 [ci]: https://github.com/boxdot/osmflat-rs/workflows/ci/badge.svg
+[berlin-features]: https://github.com/boxdot/osmflat-rs/blob/master/osmflat/examples/berlin-features.png

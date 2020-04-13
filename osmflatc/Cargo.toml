@@ -1,9 +1,13 @@
 [package]
 name = "osmflatc"
 version = "0.1.0"
-authors = ["boxdot <d@zerovolt.org>"]
+authors = [
+    "boxdot <d@zerovolt.org>",
+    "Christian Vetter <veaac.fdirct@gmail.com>",
+    "Gabriel Féron <feron.gabriel@gmail.com>"
+]
 license = "MIT/Apache-2.0"
-description = "OpenStreetMap (OSM) PBF format to osmflat data compiler"
+description = "Compiler of OpenStreetMap (OSM) Data from osm.pbf format to osm.flatdata format"
 repository = "https://github.com/boxdot/osmflat-rs"
 keywords = ["serialization", "osm", "openstreetmap", "flatdata"]
 categories = ["encoding"]
