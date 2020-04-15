@@ -162,7 +162,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // print nodes
     if types.contains('n') {
-        for node in archive.nodes().slice(..3) {
+        for node in &archive.nodes()[..3] {
             let node = Node {
                 id: node.id(),
                 lat: FixedI64(node.lat()),
@@ -183,7 +183,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 tags: collect_utf8_tags(way.tags()),
                 nodes: way
                     .refs()
-                    .map(|idx| nodes_index.at(idx as usize).value())
+                    .map(|idx| nodes_index[idx as usize].value())
                     .collect(),
             };
 
@@ -193,7 +193,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // print relations
     if types.contains('r') {
-        for (relation_idx, relation) in archive.relations().slice(..3).iter().enumerate() {
+        for (relation_idx, relation) in archive.relations()[..3].iter().enumerate() {
             let members: Result<Vec<_>, _> = Member::new_slice(&archive, relation_idx).collect();
             let relation = Relation {
                 id: relation.id(),

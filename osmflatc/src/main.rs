@@ -29,8 +29,7 @@ fn serialize_header(
     builder: &osmflat::OsmBuilder,
     stringtable: &mut StringTable,
 ) -> io::Result<()> {
-    let mut header_buf = flatdata::StructBuf::<osmflat::Header>::new();
-    let mut header = header_buf.get_mut();
+    let mut header = osmflat::Header::new();
 
     if let Some(ref bbox) = header_block.bbox {
         header.set_bbox_left(bbox.left);
@@ -72,7 +71,7 @@ fn serialize_header(
         header.set_osmosis_replication_base_url_idx(stringtable.insert(url));
     }
 
-    builder.set_header(header_buf.get())?;
+    builder.set_header(&header)?;
     Ok(())
 }
 
@@ -97,7 +96,7 @@ impl<'a> TagSerializer<'a> {
             hash_map::Entry::Occupied(entry) => *entry.get(),
             hash_map::Entry::Vacant(entry) => {
                 let idx = self.tags.len() as u64;
-                let mut tag = self.tags.grow()?;
+                let tag = self.tags.grow()?;
                 tag.set_key_idx(key_idx);
                 tag.set_value_idx(val_idx);
                 entry.insert(idx);
@@ -105,7 +104,7 @@ impl<'a> TagSerializer<'a> {
             }
         };
 
-        let mut tag_index = self.tags_index.grow()?;
+        let tag_index = self.tags_index.grow()?;
         tag_index.set_value(idx);
 
         Ok(())
@@ -166,7 +165,7 @@ fn serialize_dense_nodes(
             let index = nodes_id_to_idx.insert(id as u64);
             assert_eq!(index as usize, nodes.len());
 
-            let mut node = nodes.grow()?;
+            let node = nodes.grow()?;
             node.set_id(id);
 
             lat += dense_nodes.lat[i];
@@ -236,7 +235,7 @@ fn serialize_ways(
             let index = ways_id_to_idx.insert(pbf_way.id as u64);
             assert_eq!(index as usize, ways.len());
 
-            let mut way = ways.grow()?;
+            let way = ways.grow()?;
             way.set_id(pbf_way.id);
 
             debug_assert_eq!(pbf_way.keys.len(), pbf_way.vals.len(), "invalid input data");
@@ -297,7 +296,7 @@ fn serialize_relations(
     let string_refs = add_string_table(&block.stringtable, stringtable)?;
     for group in &block.primitivegroup {
         for pbf_relation in &group.relations {
-            let mut relation = relations.grow()?;
+            let relation = relations.grow()?;
             relation.set_id(pbf_relation.id);
 
             debug_assert_eq!(
@@ -334,7 +333,7 @@ fn serialize_relations(
                             osmflat::INVALID_IDX
                         });
 
-                        let mut member = members.add_node_member();
+                        let member = members.add_node_member();
                         member.set_node_idx(idx);
                         member.set_role_idx(string_refs[pbf_relation.roles_sid[i] as usize]);
                     }
@@ -344,7 +343,7 @@ fn serialize_relations(
                             osmflat::INVALID_IDX
                         });
 
-                        let mut member = members.add_way_member();
+                        let member = members.add_way_member();
                         member.set_way_idx(idx);
                         member.set_role_idx(string_refs[pbf_relation.roles_sid[i] as usize]);
                     }
@@ -354,7 +353,7 @@ fn serialize_relations(
                             osmflat::INVALID_IDX
                         });
 
-                        let mut member = members.add_relation_member();
+                        let member = members.add_relation_member();
                         member.set_relation_idx(idx);
                         member.set_role_idx(string_refs[pbf_relation.roles_sid[i] as usize]);
                     }
@@ -446,7 +445,7 @@ fn serialize_way_blocks(
     )?;
 
     {
-        let mut sentinel = ways.grow()?;
+        let sentinel = ways.grow()?;
         sentinel.set_tag_first_idx(tags.next_index());
         sentinel.set_ref_first_idx(nodes_index.len() as u64);
     }
@@ -499,7 +498,7 @@ fn serialize_relation_blocks(
     )?;
 
     {
-        let mut sentinel = relations.grow()?;
+        let sentinel = relations.grow()?;
         sentinel.set_tag_first_idx(tags.next_index());
     }
 
