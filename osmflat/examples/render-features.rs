@@ -82,14 +82,19 @@ impl From<Range<u64>> for Polyline {
 }
 
 impl Polyline {
-    fn into_iter<'a>(self, archive: &'a Osm) -> impl Iterator<Item = GeoCoord> + 'a {
+    fn into_iter<'a>(self, archive: &'a Osm) -> Option<impl Iterator<Item = GeoCoord> + 'a> {
         let nodes_index = archive.nodes_index();
         let nodes = archive.nodes();
-        let to_node = move |idx| {
-            let node_idx = nodes_index[idx as usize].value();
-            (&nodes[node_idx as usize]).into()
-        };
-        self.inner.into_iter().flatten().map(to_node)
+        let mut indices = self.inner.iter().cloned().flatten();
+        match indices.find(|idx| nodes_index[*idx as usize].value().is_none()) {
+            Some(_) => None,
+            None => {
+                let indices = self.inner.into_iter().flatten();
+                Some(indices.map(move |idx| {
+                    (&nodes[nodes_index[idx as usize].value().unwrap() as usize]).into()
+                }))
+            }
+        }
     }
 }
 
@@ -111,9 +116,11 @@ struct Feature {
 }
 
 impl Feature {
-    fn into_polyline(self, archive: &Osm) -> Polyline {
+    fn into_polyline(self, archive: &Osm) -> Option<Polyline> {
         match self.cat {
-            Category::Road | Category::River(_) => way_into_polyline(&archive.ways()[self.idx]),
+            Category::Road | Category::River(_) => {
+                Some(way_into_polyline(&archive.ways()[self.idx]))
+            }
             Category::Park | Category::Water => multipolygon_into_polyline(&archive, self.idx),
         }
     }
@@ -125,21 +132,24 @@ fn way_into_polyline(way: &Way) -> Polyline {
     }
 }
 
-fn multipolygon_into_polyline(archive: &Osm, idx: usize) -> Polyline {
+fn multipolygon_into_polyline(archive: &Osm, idx: usize) -> Option<Polyline> {
     let members = archive.relation_members().at(idx);
     let strings = archive.stringtable();
 
-    let inner = members
+    let inner: Option<SmallVec<[Range<u64>; 4]>> = members
         .filter_map(|m| match m {
             RelationMembersRef::WayMember(way_member)
                 if strings.substring(way_member.role_idx() as usize) == Ok("outer") =>
             {
-                Some(archive.ways()[way_member.way_idx() as usize].refs())
+                match way_member.way_idx() {
+                    Some(idx) => Some(Some(archive.ways()[idx as usize].refs())),
+                    None => Some(None),
+                }
             }
             _ => None,
         })
         .collect();
-    Polyline { inner }
+    inner.map(|inner| Polyline { inner })
 }
 
 /// Classifies all features from osmflat we want to render.
@@ -267,7 +277,11 @@ where
     let mut points = String::new(); // reuse string buffer inside the for-loop
     for (poly, cat) in classified_polylines {
         points.clear();
-        for coord in poly.into_iter(archive) {
+        let poly_iter = match poly.into_iter(archive) {
+            Some(x) => x,
+            None => continue,
+        };
+        for coord in poly_iter {
             // collect extent
             min_coord = min_coord.min(coord);
             max_coord = max_coord.max(coord);
@@ -365,9 +379,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let features = classify(&archive);
     let archive_inner = archive.clone();
-    let classified_polylines = features.map(move |f| {
+    let classified_polylines = features.filter_map(move |f| {
         let cat = f.cat;
-        (f.into_polyline(&archive_inner), cat)
+        f.into_polyline(&archive_inner).map(|p| (p, cat))
     });
     render_svg(
         &archive,

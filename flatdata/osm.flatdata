@@ -97,6 +97,7 @@ struct Node {
  */
 struct NodeIndex {
     /// Index in the `nodes` vector.
+    @optional(INVALID_IDX)
     value: u64 : 40;
 }
 
@@ -135,6 +136,7 @@ struct TagIndex {
 /// Node member of a relation.
 struct NodeMember {
     /// Index of the node in the `nodes` vector.
+    @optional(INVALID_IDX)
     node_idx: u64 : 40;
     /**
      * Optional textual field describing the function of the node in the relation.
@@ -147,6 +149,7 @@ struct NodeMember {
 /// Way member of a relation.
 struct WayMember {
     /// Index of the way in the `ways` vector.
+    @optional(INVALID_IDX)
     way_idx: u64 : 40;
     /**
      * Optional textual field describing the function of the way in the relation.
@@ -159,6 +162,7 @@ struct WayMember {
 /// Relation member of a relation.
 struct RelationMember {
     /// Index of the relation in the `relations` vector.
+    @optional(INVALID_IDX)
     relation_idx: u64 : 40;
     /**
      * Optional textual field describing the function of the relation in the parent relation.

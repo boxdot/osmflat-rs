@@ -20,7 +20,7 @@ bytes = "0.5.4"
 colored = "1.9.3"
 crossbeam = "0.7.3"
 env_logger = "0.7.1"
-flatdata = { git = "https://github.com/heremaps/flatdata", rev = "272adf55ef420698b41d0f1bb7ae25dff2a1d3d2" }
+flatdata = { git = "https://github.com/veaac/flatdata", rev = "03d6c3811a3fadf2b849c626fee096a308f59de5" }
 flate2 = "1.0.13"
 inlinable_string = "0.1.11"
 itertools = "0.8.2"
