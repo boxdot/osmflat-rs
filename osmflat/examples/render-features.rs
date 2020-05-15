@@ -85,14 +85,13 @@ impl Polyline {
         let nodes_index = archive.nodes_index();
         let nodes = archive.nodes();
         let mut indices = self.inner.iter().cloned().flatten();
-        match indices.find(|idx| nodes_index[*idx as usize].value().is_none()) {
-            Some(_) => None,
-            None => {
-                let indices = self.inner.into_iter().flatten();
-                Some(indices.map(move |idx| {
-                    (&nodes[nodes_index[idx as usize].value().unwrap() as usize]).into()
-                }))
-            }
+        if indices.any(|idx| nodes_index[idx as usize].value().is_none()) {
+            None
+        } else {
+            let indices = self.inner.into_iter().flatten();
+            Some(indices.map(move |idx| {
+                (&nodes[nodes_index[idx as usize].value().unwrap() as usize]).into()
+            }))
         }
     }
 }
@@ -134,16 +133,14 @@ fn way_into_polyline(way: &Way) -> Polyline {
 fn multipolygon_into_polyline(archive: &Osm, idx: usize) -> Option<Polyline> {
     let members = archive.relation_members().at(idx);
     let strings = archive.stringtable();
+    let ways = archive.ways();
 
     let inner: Option<SmallVec<[Range<u64>; 4]>> = members
         .filter_map(|m| match m {
             RelationMembersRef::WayMember(way_member)
                 if strings.substring(way_member.role_idx() as usize) == Ok("outer") =>
             {
-                match way_member.way_idx() {
-                    Some(idx) => Some(Some(archive.ways()[idx as usize].refs())),
-                    None => Some(None),
-                }
+                Some(way_member.way_idx().map(|idx| ways[idx as usize].refs()))
             }
             _ => None,
         })

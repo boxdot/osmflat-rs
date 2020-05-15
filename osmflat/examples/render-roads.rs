@@ -84,9 +84,10 @@ fn way_coords<'a>(archive: &'a Osm, way: &Way) -> Option<impl Iterator<Item = Ge
     let nodes = archive.nodes();
     let nodes_index = archive.nodes_index();
     let path = way.refs().map(move |i| &nodes_index[i as usize]);
-    match path.clone().find(|node| node.value().is_none()) {
-        Some(_) => None,
-        None => Some(path.map(move |node| (&nodes[node.value().unwrap() as usize]).into())),
+    if path.clone().any(|node| node.value().is_none()) {
+        None
+    } else {
+        Some(path.map(move |node| (&nodes[node.value().unwrap() as usize]).into()))
     }
 }
 
