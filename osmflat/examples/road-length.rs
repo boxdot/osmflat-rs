@@ -13,7 +13,7 @@
 //! The code in this example file is released into the Public Domain.
 
 use itertools::Itertools;
-use osmflat::{Archive, FileResourceStorage, Node, Osm};
+use osmflat::{FileResourceStorage, Node, Osm};
 
 struct Coords {
     lat: f64,

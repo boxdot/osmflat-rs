@@ -15,7 +15,7 @@
 //! through nodes:
 //!
 //! ```rust,no_run
-//! use osmflat::{Archive, FileResourceStorage, Osm};
+//! use osmflat::{FileResourceStorage, Osm};
 //!
 //! fn main() {
 //!     let storage = FileResourceStorage::new("path/to/archive.osm.flatdata");
@@ -47,4 +47,4 @@ pub use crate::osm::*;
 pub use crate::tags::*;
 
 // re-export what is needed from flatdata to use osmflat
-pub use flatdata::{Archive, ArchiveBuilder, FileResourceStorage};
+pub use flatdata::FileResourceStorage;

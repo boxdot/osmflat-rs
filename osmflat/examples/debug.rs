@@ -9,7 +9,7 @@
 //!
 //! The code in this example file is released into the Public Domain.
 
-use osmflat::{iter_tags, Archive, FileResourceStorage, Osm, RelationMembersRef, COORD_SCALE};
+use osmflat::{iter_tags, FileResourceStorage, Osm, RelationMembersRef, COORD_SCALE};
 
 use std::fmt;
 use std::str::{self, Utf8Error};

@@ -10,7 +10,7 @@ use crate::stats::Stats;
 use crate::strings::StringTable;
 
 use colored::*;
-use flatdata::{ArchiveBuilder, FileResourceStorage};
+use flatdata::FileResourceStorage;
 use itertools::Itertools;
 use log::info;
 use memmap::Mmap;

@@ -1718,11 +1718,8 @@ impl ::std::fmt::Debug for Osm {
     }
 }
 
-impl flatdata::Archive for Osm {
-    const NAME: &'static str = "Osm";
-    const SCHEMA: &'static str = schema::osm::OSM;
-
-    fn open(storage: ::std::rc::Rc<dyn flatdata::ResourceStorage>)
+impl Osm {
+    pub fn open(storage: ::std::rc::Rc<dyn flatdata::ResourceStorage>)
         -> ::std::result::Result<Self, flatdata::ResourceStorageError>
     {
         #[allow(unused_imports)]
@@ -1731,16 +1728,22 @@ impl flatdata::Archive for Osm {
         #[allow(unused_variables)]
         let extend = |x : Result<&[u8], flatdata::ResourceStorageError>| -> Result<&'static [u8], flatdata::ResourceStorageError> {x.map(|x| unsafe{std::mem::transmute(x)})};
 
-        storage.read(&Self::signature_name(Self::NAME), Self::SCHEMA)?;
+        storage.read(&Self::signature_name("Osm"), schema::osm::OSM)?;
 
         let resource = extend(storage.read("header", schema::osm::resources::HEADER));
         let header = resource.map(|x| super::osm::Header::from_bytes_slice(x))??;
         let resource = extend(storage.read("nodes", schema::osm::resources::NODES));
         let nodes = resource.map(|x| <&[super::osm::Node]>::from_bytes(x))??;
+        let size = nodes.len();
+        if size > 1099511627776 { return Err(flatdata::ResourceStorageError::TooBig{resource_name: "nodes", size}); }
         let resource = extend(storage.read("ways", schema::osm::resources::WAYS));
         let ways = resource.map(|x| <&[super::osm::Way]>::from_bytes(x))??;
+        let size = ways.len();
+        if size > 1099511627776 { return Err(flatdata::ResourceStorageError::TooBig{resource_name: "ways", size}); }
         let resource = extend(storage.read("relations", schema::osm::resources::RELATIONS));
         let relations = resource.map(|x| <&[super::osm::Relation]>::from_bytes(x))??;
+        let size = relations.len();
+        if size > 1099511627776 { return Err(flatdata::ResourceStorageError::TooBig{resource_name: "relations", size}); }
         let relation_members = {
             let index_schema = &format!("index({})", schema::osm::resources::RELATION_MEMBERS);
             let index = extend(storage.read("relation_members_index", &index_schema));
@@ -1759,12 +1762,20 @@ impl flatdata::Archive for Osm {
         };
         let resource = extend(storage.read("tags", schema::osm::resources::TAGS));
         let tags = resource.map(|x| <&[super::osm::Tag]>::from_bytes(x))??;
+        let size = tags.len();
+        if size > 1099511627776 { return Err(flatdata::ResourceStorageError::TooBig{resource_name: "tags", size}); }
         let resource = extend(storage.read("tags_index", schema::osm::resources::TAGS_INDEX));
         let tags_index = resource.map(|x| <&[super::osm::TagIndex]>::from_bytes(x))??;
+        let size = tags_index.len();
+        if size > 1099511627776 { return Err(flatdata::ResourceStorageError::TooBig{resource_name: "tags_index", size}); }
         let resource = extend(storage.read("nodes_index", schema::osm::resources::NODES_INDEX));
         let nodes_index = resource.map(|x| <&[super::osm::NodeIndex]>::from_bytes(x))??;
+        let size = nodes_index.len();
+        if size > 1099511627776 { return Err(flatdata::ResourceStorageError::TooBig{resource_name: "nodes_index", size}); }
         let resource = extend(storage.read("stringtable", schema::osm::resources::STRINGTABLE));
         let stringtable = resource.map(|x| flatdata::RawData::new(x))?;
+        let size = stringtable.len();
+        if size > 1099511627776 { return Err(flatdata::ResourceStorageError::TooBig{resource_name: "stringtable", size}); }
 
         Ok(Self {
             _storage: storage,
@@ -1955,14 +1966,11 @@ impl OsmBuilder {
 
 }
 
-impl flatdata::ArchiveBuilder for OsmBuilder {
-    const NAME: &'static str = "Osm";
-    const SCHEMA: &'static str = schema::osm::OSM;
-
-    fn new(
+impl OsmBuilder {
+    pub fn new(
         storage: ::std::rc::Rc<dyn flatdata::ResourceStorage>,
     ) -> Result<Self, flatdata::ResourceStorageError> {
-        flatdata::create_archive::<Self>(&storage)?;
+        flatdata::create_archive("Osm", schema::osm::OSM, &storage)?;
         Ok(Self { storage })
     }
 }

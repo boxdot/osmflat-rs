@@ -18,8 +18,7 @@
 //! The code in this example file is released into the Public Domain.
 
 use osmflat::{
-    iter_tags, Archive, FileResourceStorage, Node, Osm, Relation, RelationMembersRef, Way,
-    COORD_SCALE,
+    iter_tags, FileResourceStorage, Node, Osm, Relation, RelationMembersRef, Way, COORD_SCALE,
 };
 use smallvec::{smallvec, SmallVec};
 use structopt::StructOpt;

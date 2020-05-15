@@ -4,7 +4,7 @@
 //!
 //! The code in this example file is released into the Public Domain.
 
-use osmflat::{Archive, FileResourceStorage, Osm};
+use osmflat::{FileResourceStorage, Osm};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let archive_dir = std::env::args()

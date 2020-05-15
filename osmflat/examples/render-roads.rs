@@ -4,7 +4,7 @@
 //!
 //! The code in this example file is released into the Public Domain.
 
-use osmflat::{find_tag_by, Archive, FileResourceStorage, Node, Osm, Way, COORD_SCALE};
+use osmflat::{find_tag_by, FileResourceStorage, Node, Osm, Way, COORD_SCALE};
 
 use itertools::Itertools;
 use structopt::StructOpt;

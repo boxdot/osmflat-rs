@@ -21,7 +21,7 @@ To compile OSM data from pbf to osmflat use:
 cargo run --release -- input.osm.pbf output.osm.flatdata
 ```
 
-The output is a flatdata archive, which is a directory consisting of several
+The output is a flatdata which is a directory consisting of several
 files. The schema is also part of the archive. It is checked every time the
 archive is opened. This guarantees that the compiler which was used to produce
 the archive fits to the schema used for reading it. The archive data is not
@@ -43,7 +43,7 @@ Now, you can open an osmflat archive as any other flatdata archive and read its
 data:
 
 ```rust
-use osmflat::{Archive, FileResourceStorage, Osm};
+use osmflat::{FileResourceStorage, Osm};
 
 fn main() {
     let storage = FileResourceStorage::new("path/to/archive.osm.flatdata");
