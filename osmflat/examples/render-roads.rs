@@ -4,7 +4,7 @@
 //!
 //! The code in this example file is released into the Public Domain.
 
-use osmflat::{find_tag_by, Archive, FileResourceStorage, Node, Osm, Way, COORD_SCALE};
+use osmflat::{find_tag_by, FileResourceStorage, Node, Osm, Way, COORD_SCALE};
 
 use itertools::Itertools;
 use structopt::StructOpt;
@@ -80,11 +80,15 @@ fn map_transform(
     }
 }
 
-fn way_coords<'a>(archive: &'a Osm, way: &Way) -> impl Iterator<Item = GeoCoord> + 'a {
+fn way_coords<'a>(archive: &'a Osm, way: &Way) -> Option<impl Iterator<Item = GeoCoord> + 'a> {
     let nodes = archive.nodes();
     let nodes_index = archive.nodes_index();
-    way.refs()
-        .map(move |i| (&nodes[nodes_index[i as usize].value() as usize]).into())
+    let path = way.refs().map(move |i| &nodes_index[i as usize]);
+    if path.clone().any(|node| node.value().is_none()) {
+        None
+    } else {
+        Some(path.map(move |node| (&nodes[node.value().unwrap() as usize]).into()))
+    }
 }
 
 fn way_filter(way: &Way, archive: &Osm) -> bool {
@@ -147,7 +151,9 @@ fn bresenham(mut x0: i32, mut y0: i32, x1: i32, y1: i32) -> impl Iterator<Item =
 
 fn render(archive: &Osm, width: u32) -> Image {
     // compute extent
-    let coords = roads(archive).flat_map(|way| way_coords(archive, way));
+    let coords = roads(archive)
+        .filter_map(|way| way_coords(archive, way))
+        .flatten();
     let (min, max) = compute_bounds(coords);
 
     // compute ratio and height
@@ -160,8 +166,9 @@ fn render(archive: &Osm, width: u32) -> Image {
     // draw
     let mut image = Image::new(width, height);
 
-    let line_segments =
-        roads(archive).flat_map(|way| way_coords(archive, way).map(t).tuple_windows());
+    let line_segments = roads(archive)
+        .filter_map(|way| Some(way_coords(archive, way)?.map(t).tuple_windows()))
+        .flatten();
 
     for ((x0, y0), (x1, y1)) in line_segments {
         for (x, y) in bresenham(x0, y0, x1, y1) {

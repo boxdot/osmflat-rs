@@ -12,7 +12,8 @@
 //!
 //! The code in this example file is released into the Public Domain.
 
-use osmflat::{Archive, FileResourceStorage, Node, Osm};
+use itertools::Itertools;
+use osmflat::{FileResourceStorage, Node, Osm};
 
 struct Coords {
     lat: f64,
@@ -63,18 +64,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let nodes = archive.nodes();
     let nodes_index = archive.nodes_index();
 
-    let lengths = highways.map(|way| {
+    let lengths = highways.filter_map(|way| {
         let coords = way.refs().map(|idx| {
             // A way references a range of nodes by storing a contiguous range of
             // indexes in `nodes_index`. Each of these references a node in `nodes`.
             // This is a common pattern when flattening 1 to n relations.
-            Coords::from_node(&nodes[nodes_index[idx as usize].value() as usize])
+            Some(Coords::from_node(
+                &nodes[nodes_index[idx as usize].value()? as usize],
+            ))
         });
-        let length: f64 = coords
+        let length: Option<f64> = coords
             .clone()
             .zip(coords.skip(1))
-            .map(|(from, to)| haversine_distance(from, to))
-            .sum();
+            .map(|(from, to)| Some(haversine_distance(from?, to?)))
+            .fold_options(0.0, |acc, x| acc + x);
         length
     });
 

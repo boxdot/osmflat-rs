@@ -10,7 +10,7 @@
 //!
 //! The code in this example file is released into the Public Domain.
 
-use osmflat::{find_tag, has_tag, iter_tags, Archive, FileResourceStorage, Osm};
+use osmflat::{find_tag, has_tag, iter_tags, FileResourceStorage, Osm};
 use std::str;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {

@@ -9,7 +9,7 @@
 //!
 //! The code in this example file is released into the Public Domain.
 
-use osmflat::{iter_tags, Archive, FileResourceStorage, Osm, RelationMembersRef, COORD_SCALE};
+use osmflat::{iter_tags, FileResourceStorage, Osm, RelationMembersRef, COORD_SCALE};
 
 use std::fmt;
 use std::str::{self, Utf8Error};
@@ -55,7 +55,7 @@ struct Node<'ar> {
 struct Way<'ar> {
     id: i64,
     tags: Vec<(&'ar str, &'ar str)>,
-    nodes: Vec<u64>,
+    nodes: Vec<Option<u64>>,
 }
 
 #[derive(Debug)]
@@ -68,7 +68,7 @@ struct Relation<'ar> {
 #[derive(Debug)]
 struct Member<'ar> {
     type_: Type,
-    idx: u64,
+    idx: Option<u64>,
     role: &'ar str,
 }
 

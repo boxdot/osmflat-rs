@@ -5,7 +5,7 @@
 //!
 //! The code in this example file is released into the Public Domain.
 
-use osmflat::{find_tag, has_tag, Archive, Osm};
+use osmflat::{find_tag, has_tag, Osm};
 use serde::Serialize;
 use std::str;
 

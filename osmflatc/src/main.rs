@@ -10,7 +10,7 @@ use crate::stats::Stats;
 use crate::strings::StringTable;
 
 use colored::*;
-use flatdata::{ArchiveBuilder, FileResourceStorage};
+use flatdata::FileResourceStorage;
 use itertools::Itertools;
 use log::info;
 use memmap::Mmap;
@@ -199,7 +199,7 @@ fn serialize_dense_nodes(
 fn resolve_ways(
     block: &osmpbf::PrimitiveBlock,
     nodes_id_to_idx: &ids::IdTable,
-) -> (Vec<u64>, Stats) {
+) -> (Vec<Option<u64>>, Stats) {
     let mut result = Vec::new();
     let mut stats = Stats::default();
     for group in &block.primitivegroup {
@@ -207,10 +207,9 @@ fn resolve_ways(
             let mut node_ref = 0;
             for delta in &pbf_way.refs {
                 node_ref += delta;
-                let idx = nodes_id_to_idx.get(node_ref as u64).unwrap_or_else(|| {
-                    stats.num_unresolved_node_ids += 1;
-                    osmflat::INVALID_IDX
-                });
+                let idx = nodes_id_to_idx.get(node_ref as u64);
+                stats.num_unresolved_node_ids += idx.is_none() as usize;
+
                 result.push(idx);
             }
         }
@@ -220,7 +219,7 @@ fn resolve_ways(
 
 fn serialize_ways(
     block: &osmpbf::PrimitiveBlock,
-    nodes_id_to_idx: &[u64],
+    nodes_id_to_idx: &[Option<u64>],
     ways: &mut flatdata::ExternalVector<osmflat::Way>,
     ways_id_to_idx: &mut ids::IdTableBuilder,
     stringtable: &mut StringTable,
@@ -328,30 +327,24 @@ fn serialize_relations(
 
                 match member_type.unwrap() {
                     osmpbf::relation::MemberType::Node => {
-                        let idx = nodes_id_to_idx.get(memid as u64).unwrap_or_else(|| {
-                            stats.num_unresolved_node_ids += 1;
-                            osmflat::INVALID_IDX
-                        });
+                        let idx = nodes_id_to_idx.get(memid as u64);
+                        stats.num_unresolved_node_ids = idx.is_none() as usize;
 
                         let member = members.add_node_member();
                         member.set_node_idx(idx);
                         member.set_role_idx(string_refs[pbf_relation.roles_sid[i] as usize]);
                     }
                     osmpbf::relation::MemberType::Way => {
-                        let idx = ways_id_to_idx.get(memid as u64).unwrap_or_else(|| {
-                            stats.num_unresolved_way_ids += 1;
-                            osmflat::INVALID_IDX
-                        });
+                        let idx = ways_id_to_idx.get(memid as u64);
+                        stats.num_unresolved_way_ids = idx.is_none() as usize;
 
                         let member = members.add_way_member();
                         member.set_way_idx(idx);
                         member.set_role_idx(string_refs[pbf_relation.roles_sid[i] as usize]);
                     }
                     osmpbf::relation::MemberType::Relation => {
-                        let idx = relations_id_to_idx.get(memid as u64).unwrap_or_else(|| {
-                            stats.num_unresolved_rel_ids += 1;
-                            osmflat::INVALID_IDX
-                        });
+                        let idx = relations_id_to_idx.get(memid as u64);
+                        stats.num_unresolved_rel_ids = idx.is_none() as usize;
 
                         let member = members.add_relation_member();
                         member.set_relation_idx(idx);
@@ -427,7 +420,7 @@ fn serialize_way_blocks(
             let ids = resolve_ways(&block, nodes_id_to_idx);
             Ok((block, ids))
         },
-        |block: Result<(osmpbf::PrimitiveBlock, (Vec<u64>, Stats)), io::Error>| -> Result<(), Error> {
+        |block: Result<(osmpbf::PrimitiveBlock, (Vec<Option<u64>>, Stats)), io::Error>| -> Result<(), Error> {
             let (block, (ids, stats_resolve)) = block?;
             *stats += stats_resolve;
             *stats += serialize_ways(

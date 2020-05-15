@@ -15,7 +15,7 @@ readme = "README.md"
 edition = "2018"
 
 [dependencies]
-flatdata = { git = "https://github.com/heremaps/flatdata", rev = "272adf55ef420698b41d0f1bb7ae25dff2a1d3d2" }
+flatdata = "0.5"
 
 [dev-dependencies]
 itertools = "0.8.2"
