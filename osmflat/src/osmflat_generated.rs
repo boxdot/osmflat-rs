@@ -1606,7 +1606,7 @@ impl<'a> flatdata::VariadicStruct<'a> for RelationMembers {
 /// ```
 #[derive(Clone)]
 pub struct Osm {
-    _storage: ::std::rc::Rc<dyn flatdata::ResourceStorage>,
+    _storage: flatdata::StorageHandle,
     header : &'static super::osm::Header,
     nodes : &'static [super::osm::Node],
     ways : &'static [super::osm::Way],
@@ -1719,7 +1719,7 @@ impl ::std::fmt::Debug for Osm {
 }
 
 impl Osm {
-    pub fn open(storage: ::std::rc::Rc<dyn flatdata::ResourceStorage>)
+    pub fn open(storage: flatdata::StorageHandle)
         -> ::std::result::Result<Self, flatdata::ResourceStorageError>
     {
         #[allow(unused_imports)]
@@ -1797,7 +1797,7 @@ impl Osm {
 ///[`Osm`]: struct.Osm.html
 #[derive(Clone, Debug)]
 pub struct OsmBuilder {
-    storage: ::std::rc::Rc<dyn flatdata::ResourceStorage>
+    storage: flatdata::StorageHandle
 }
 
 impl OsmBuilder {
@@ -1968,7 +1968,7 @@ impl OsmBuilder {
 
 impl OsmBuilder {
     pub fn new(
-        storage: ::std::rc::Rc<dyn flatdata::ResourceStorage>,
+        storage: flatdata::StorageHandle,
     ) -> Result<Self, flatdata::ResourceStorageError> {
         flatdata::create_archive("Osm", schema::osm::OSM, &storage)?;
         Ok(Self { storage })
