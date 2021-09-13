@@ -81,6 +81,5 @@ jobs:
         rust-version: stable
     - name: Install clippy
       run: rustup component add clippy
-    - name: Check formatting
+    - name: Clippy
       run: cargo clippy --all-targets
-
