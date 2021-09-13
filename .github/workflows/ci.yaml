@@ -18,12 +18,12 @@ jobs:
         - build: stable
           os: ubuntu-latest
           rust: stable
-        - build: beta
-          os: ubuntu-latest
-          rust: beta
-        - build: nightly
-          os: ubuntu-latest
-          rust: nightly
+        # - build: beta
+        #   os: ubuntu-latest
+        #   rust: beta
+        # - build: nightly
+        #   os: ubuntu-latest
+        #   rust: nightly
         - build: macos
           os: macOS-latest
           rust: stable
