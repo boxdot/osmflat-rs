@@ -7,23 +7,30 @@ on:
   schedule:
     - cron: '00 01 * * *'
 
+env:
+  CARGO_INCREMENTAL: 0
+  RUST_BACKTRACE: short
+  RUSTFLAGS: "-D warnings -W rust-2021-compatibility"
+  RUSTUP_MAX_RETRIES: 10
+
 jobs:
   rust:
     name: Rust
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        build: [stable, beta, nightly, macos, win-msvc, win-gnu]
+        # build: [stable, beta, nightly, macos, win-msvc, win-gnu]
+        build: [stable, macos, win-msvc, win-gnu]
         include:
         - build: stable
           os: ubuntu-latest
           rust: stable
-        - build: beta
-          os: ubuntu-latest
-          rust: beta
-        - build: nightly
-          os: ubuntu-latest
-          rust: nightly
+        # - build: beta
+        #   os: ubuntu-latest
+        #   rust: beta
+        # - build: nightly
+        #   os: ubuntu-latest
+        #   rust: nightly
         - build: macos
           os: macOS-latest
           rust: stable
@@ -65,3 +72,20 @@ jobs:
       run: rustup component add rustfmt
     - name: Check formatting
       run: cargo fmt -- --check
+
+  clippy:
+    name: clippy
+    runs-on: ubuntu-18.04
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v1
+      with:
+        fetch-depth: 1
+    - name: Install Rust
+      uses: hecrj/setup-rust-action@v1
+      with:
+        rust-version: stable
+    - name: Install clippy
+      run: rustup component add clippy
+    - name: Clippy
+      run: cargo clippy --all-targets

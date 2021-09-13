@@ -104,7 +104,7 @@ struct NodeIndex {
 /**
  * A way is an ordered list of nodes.
  *
- * See https://wiki.openstreetmap.org/wiki/Way.
+ * See <https://wiki.openstreetmap.org/wiki/Way>.
  */
 struct Way {
     /// Unique ID of the way.
@@ -175,7 +175,7 @@ struct RelationMember {
 /**
  * A relation is an ordered list of one or more nodes, ways and/or relations as members.
  *
- * See https://wiki.openstreetmap.org/wiki/Relation.
+ * See <https://wiki.openstreetmap.org/wiki/Relation>.
  */
 struct Relation {
     /// Unique ID of the relation.

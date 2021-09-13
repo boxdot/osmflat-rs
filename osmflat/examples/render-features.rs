@@ -81,7 +81,7 @@ impl From<Range<u64>> for Polyline {
 }
 
 impl Polyline {
-    fn into_iter<'a>(self, archive: &'a Osm) -> Option<impl Iterator<Item = GeoCoord> + 'a> {
+    fn into_iter(self, archive: &Osm) -> Option<impl Iterator<Item = GeoCoord> + '_> {
         let nodes_index = archive.nodes_index();
         let nodes = archive.nodes();
         let mut indices = self.inner.iter().cloned().flatten();
@@ -119,7 +119,7 @@ impl Feature {
             Category::Road | Category::River(_) => {
                 Some(way_into_polyline(&archive.ways()[self.idx]))
             }
-            Category::Park | Category::Water => multipolygon_into_polyline(&archive, self.idx),
+            Category::Park | Category::Water => multipolygon_into_polyline(archive, self.idx),
         }
     }
 }
@@ -149,7 +149,7 @@ fn multipolygon_into_polyline(archive: &Osm, idx: usize) -> Option<Polyline> {
 }
 
 /// Classifies all features from osmflat we want to render.
-fn classify<'a>(archive: &'a Osm) -> impl Iterator<Item = Feature> + 'a {
+fn classify(archive: &Osm) -> impl Iterator<Item = Feature> + '_ {
     let ways = archive.ways().iter().enumerate();
     let ways = ways
         .filter_map(move |(idx, way)| classify_way(archive, way).map(|cat| Feature { idx, cat }));
