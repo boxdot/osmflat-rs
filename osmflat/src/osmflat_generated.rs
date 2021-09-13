@@ -705,7 +705,7 @@ let value = value.unwrap_or(super::osm::INVALID_IDX);        flatdata_write_byte
 }
 /// A way is an ordered list of nodes.
 ///
-/// See https://wiki.openstreetmap.org/wiki/Way.
+/// See <https://wiki.openstreetmap.org/wiki/Way>.
 #[repr(transparent)]
 pub struct Way {
     data: [u8; 15],
@@ -1357,7 +1357,7 @@ let value = value.unwrap_or(super::osm::INVALID_IDX);        flatdata_write_byte
 }
 /// A relation is an ordered list of one or more nodes, ways and/or relations as members.
 ///
-/// See https://wiki.openstreetmap.org/wiki/Relation.
+/// See <https://wiki.openstreetmap.org/wiki/Relation>.
 #[repr(transparent)]
 pub struct Relation {
     data: [u8; 10],

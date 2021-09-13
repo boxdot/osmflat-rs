@@ -7,6 +7,12 @@ on:
   schedule:
     - cron: '00 01 * * *'
 
+env:
+  CARGO_INCREMENTAL: 0
+  RUST_BACKTRACE: short
+  RUSTFLAGS: "-D warnings -W rust-2021-compatibility"
+  RUSTUP_MAX_RETRIES: 10
+
 jobs:
   rust:
     name: Rust
