@@ -36,7 +36,7 @@ impl BlockType {
         const RELATIONS_TAG: u32 = 4;
         const CHANGESETS_TAG: u32 = 5;
 
-        let mut cursor = Cursor::new(&blob[..]);
+        let mut cursor = Cursor::new(blob);
         loop {
             // decode fields of PrimitiveBlock
             let (key, wire_type) = prost::encoding::decode_key(&mut cursor)?;

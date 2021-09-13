@@ -132,7 +132,7 @@ fn add_string_table(
 ) -> Result<Vec<u64>, Error> {
     let mut result = Vec::with_capacity(pbf_stringtable.s.len());
     for x in &pbf_stringtable.s {
-        let string = str::from_utf8(&x)?;
+        let string = str::from_utf8(x)?;
         result.push(stringtable.insert(string));
     }
     Ok(result)
@@ -266,7 +266,7 @@ where
     pb.message("Building relations index...");
     parallel::parallel_process(
         block_index,
-        |idx| read_block(&data, &idx),
+        |idx| read_block(data, &idx),
         |block: Result<osmpbf::PrimitiveBlock, _>| -> Result<(), Error> {
             for group in &block?.primitivegroup {
                 for relation in &group.relations {
@@ -281,6 +281,7 @@ where
     Ok(result.build())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn serialize_relations(
     block: &osmpbf::PrimitiveBlock,
     nodes_id_to_idx: &ids::IdTable,
@@ -373,7 +374,7 @@ fn serialize_dense_node_blocks(
 
     parallel::parallel_process(
         blocks.into_iter(),
-        |idx| read_block(&data, &idx),
+        |idx| read_block(data, &idx),
         |block| -> Result<(), Error> {
             *stats += serialize_dense_nodes(
                 &block?,
@@ -399,6 +400,8 @@ fn serialize_dense_node_blocks(
     Ok(nodes_id_to_idx)
 }
 
+type PrimitiveBlockWithIds = (osmpbf::PrimitiveBlock, (Vec<Option<u64>>, Stats));
+
 fn serialize_way_blocks(
     builder: &osmflat::OsmBuilder,
     blocks: Vec<BlockIndex>,
@@ -416,11 +419,11 @@ fn serialize_way_blocks(
     parallel::parallel_process(
         blocks.into_iter(),
         |idx| {
-            let block: osmpbf::PrimitiveBlock = read_block(&data, &idx)?;
+            let block: osmpbf::PrimitiveBlock = read_block(data, &idx)?;
             let ids = resolve_ways(&block, nodes_id_to_idx);
             Ok((block, ids))
         },
-        |block: Result<(osmpbf::PrimitiveBlock, (Vec<Option<u64>>, Stats)), io::Error>| -> Result<(), Error> {
+        |block: io::Result<PrimitiveBlockWithIds>| -> Result<(), Error> {
             let (block, (ids, stats_resolve)) = block?;
             *stats += stats_resolve;
             *stats += serialize_ways(
@@ -452,6 +455,7 @@ fn serialize_way_blocks(
     Ok(ways_id_to_idx)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn serialize_relation_blocks(
     builder: &osmflat::OsmBuilder,
     blocks: Vec<BlockIndex>,
@@ -473,12 +477,12 @@ fn serialize_relation_blocks(
     pb.message("Converting relations...");
     parallel::parallel_process(
         blocks.into_iter(),
-        |idx| read_block(&data, &idx),
+        |idx| read_block(data, &idx),
         |block| -> Result<(), Error> {
             *stats += serialize_relations(
                 &block?,
-                &nodes_id_to_idx,
-                &ways_id_to_idx,
+                nodes_id_to_idx,
+                ways_id_to_idx,
                 &relations_id_to_idx,
                 stringtable,
                 &mut relations,
@@ -549,7 +553,7 @@ fn run(args: args::Args) -> Result<(), Error> {
         .into());
     }
     let idx = &pbf_header[0];
-    let pbf_header: osmpbf::HeaderBlock = read_block(&input_data, &idx)?;
+    let pbf_header: osmpbf::HeaderBlock = read_block(&input_data, idx)?;
     serialize_header(&pbf_header, &builder, &mut stringtable)?;
     info!("Header written.");
 
