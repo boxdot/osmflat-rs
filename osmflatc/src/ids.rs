@@ -6,7 +6,6 @@ pub struct IdTable {
     // map u64 id x to u32 by storing a sorted mapping table for each value of x / 2^24
     // each mapping entry (u64) represents (u24) id set (x % 2^24), and mapped id (u40)
     data: Vec<Vec<u64>>,
-    num_ids: u64,
 }
 
 #[derive(Debug, Default)]
@@ -47,10 +46,7 @@ impl IdTableBuilder {
     pub fn build(mut self) -> IdTable {
         self.data.par_iter_mut().for_each(|x| x.par_sort_unstable());
 
-        IdTable {
-            data: self.data,
-            num_ids: self.next_id,
-        }
+        IdTable { data: self.data }
     }
 }
 
