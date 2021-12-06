@@ -33,42 +33,63 @@ impl fmt::Debug for FixedI64 {
 
 #[derive(Debug)]
 struct Header<'ar> {
+    #[allow(unused)]
     bbox: (FixedI64, FixedI64, FixedI64, FixedI64),
+    #[allow(unused)]
     required_features: Vec<&'ar str>,
+    #[allow(unused)]
     optional_features: Vec<&'ar str>,
+    #[allow(unused)]
     writingprogram: &'ar str,
+    #[allow(unused)]
     source: &'ar str,
+    #[allow(unused)]
     osmosis_replication_timestamp: i64,
+    #[allow(unused)]
     osmosis_replication_sequence_number: i64,
+    #[allow(unused)]
     osmosis_replication_base_url: &'ar str,
 }
 
 #[derive(Debug)]
 struct Node<'ar> {
+    #[allow(unused)]
     id: i64,
+    #[allow(unused)]
     lat: FixedI64,
+    #[allow(unused)]
     lon: FixedI64,
+    #[allow(unused)]
     tags: Vec<(&'ar str, &'ar str)>,
 }
 
 #[derive(Debug)]
 struct Way<'ar> {
+    #[allow(unused)]
     id: i64,
+    #[allow(unused)]
     tags: Vec<(&'ar str, &'ar str)>,
+    #[allow(unused)]
     nodes: Vec<Option<u64>>,
 }
 
 #[derive(Debug)]
 struct Relation<'ar> {
+    #[allow(unused)]
     id: i64,
+    #[allow(unused)]
     tags: Vec<(&'ar str, &'ar str)>,
+    #[allow(unused)]
     members: Vec<Member<'ar>>,
 }
 
 #[derive(Debug)]
 struct Member<'ar> {
+    #[allow(unused)]
     type_: Type,
+    #[allow(unused)]
     idx: Option<u64>,
+    #[allow(unused)]
     role: &'ar str,
 }
 
