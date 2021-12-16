@@ -35,9 +35,6 @@
 //! [`osmflatc`]: https://github.com/boxdot/osmflat-rs/tree/master/osmflatc
 //! [examples]: https://github.com/boxdot/osmflat-rs/tree/master/osmflat/examples
 
-#[macro_use]
-extern crate flatdata;
-
 // generated osm module
 include!("osmflat_generated.rs");
 
@@ -48,3 +45,5 @@ pub use crate::tags::*;
 
 // re-export what is needed from flatdata to use osmflat
 pub use flatdata::FileResourceStorage;
+#[cfg(feature = "tar")]
+pub use flatdata::TarArchiveResourceStorage;
