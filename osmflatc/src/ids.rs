@@ -34,7 +34,7 @@ impl IdBlock {
     fn insert(&mut self, x: u32) {
         match self {
             IdBlock::Sparse(ids) => {
-                if ids.len() * 4 < ID_BLOCK_SIZE / 8 {
+                if ids.len() * 8 < ID_BLOCK_SIZE / 8 {
                     ids.push(x)
                 } else {
                     let mut dense = IdBlock::Dense {

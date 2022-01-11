@@ -18,10 +18,10 @@ where
     let num_threads = rayon::current_num_threads();
 
     let iter = Arc::new(Mutex::new(iter.enumerate()));
-    let next = Arc::new((Mutex::new(20 * num_threads), Condvar::new()));
+    let next = Arc::new((Mutex::new(2 * num_threads), Condvar::new()));
 
     crossbeam::scope(|s| {
-        let (sender, receiver) = sync_channel(20 * num_threads);
+        let (sender, receiver) = sync_channel(2 * num_threads);
         for _ in 0..num_threads {
             let sender = sender.clone();
             let iter = iter.clone();
