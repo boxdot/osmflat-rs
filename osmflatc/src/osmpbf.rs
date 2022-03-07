@@ -191,7 +191,7 @@ fn blob_type_from_blob_info(
     };
     assert_eq!(
         blob_data.len(),
-        blob.raw_size.unwrap_or_else(|| blob_data.len() as i32) as usize
+        blob.raw_size.unwrap_or(blob_data.len() as i32) as usize
     );
 
     Ok(BlockIndex {
