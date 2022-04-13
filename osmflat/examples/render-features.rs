@@ -81,6 +81,7 @@ impl From<Range<u64>> for Polyline {
 }
 
 impl Polyline {
+    #[allow(clippy::iter_overeager_cloned)]
     fn into_iter(self, archive: &Osm) -> Option<impl Iterator<Item = GeoCoord> + '_> {
         let nodes_index = archive.nodes_index();
         let nodes = archive.nodes();
