@@ -4,7 +4,7 @@ use log::info;
 use prost::{self, Message};
 use rayon::prelude::*;
 
-use std::io::{self, Cursor, Read};
+use std::io::{self, Read};
 
 include!(concat!(env!("OUT_DIR"), "/osmpbf.rs"));
 
@@ -28,7 +28,7 @@ impl BlockType {
     /// Note: We use public API of `prost` crate, which though is not exposed in
     /// the crate and marked with comment that it should be only used from
     /// `prost::Message`.
-    pub fn from_osmdata_blob(blob: &[u8]) -> io::Result<BlockType> {
+    pub fn from_osmdata_blob(mut blob: &[u8]) -> io::Result<BlockType> {
         const PRIMITIVE_GROUP_TAG: u32 = 2;
         const NODES_TAG: u32 = 1;
         const DENSE_NODES_TAG: u32 = 2;
@@ -36,16 +36,15 @@ impl BlockType {
         const RELATIONS_TAG: u32 = 4;
         const CHANGESETS_TAG: u32 = 5;
 
-        let mut cursor = Cursor::new(blob);
         loop {
             // decode fields of PrimitiveBlock
-            let (key, wire_type) = prost::encoding::decode_key(&mut cursor)?;
+            let (key, wire_type) = prost::encoding::decode_key(&mut blob)?;
             if key != PRIMITIVE_GROUP_TAG {
                 // primitive group
                 prost::encoding::skip_field(
                     wire_type,
                     key,
-                    &mut cursor,
+                    &mut blob,
                     prost::encoding::DecodeContext::default(),
                 )?;
                 continue;
@@ -56,9 +55,9 @@ impl BlockType {
             // optional field, which defines the type of the block.
 
             // Decode the number of primitive groups.
-            let _ = prost::encoding::decode_varint(&mut cursor)?;
+            let _ = prost::encoding::decode_varint(&mut blob)?;
             // Decode the tag of the first primitive group defining the type.
-            let (tag, _wire_type) = prost::encoding::decode_key(&mut cursor)?;
+            let (tag, _wire_type) = prost::encoding::decode_key(&mut blob)?;
             let block_type = match tag {
                 NODES_TAG => BlockType::Nodes,
                 DENSE_NODES_TAG => BlockType::DenseNodes,
