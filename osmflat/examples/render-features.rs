@@ -17,11 +17,11 @@
 //!
 //! The code in this example file is released into the Public Domain.
 
+use argh::FromArgs;
 use osmflat::{
     iter_tags, FileResourceStorage, Node, Osm, Relation, RelationMembersRef, Way, COORD_SCALE,
 };
 use smallvec::{smallvec, SmallVec};
-use structopt::StructOpt;
 use svg::{
     node::{self, element},
     Document,
@@ -348,28 +348,29 @@ where
     svg::save(output, &document)
 }
 
-#[derive(Debug, StructOpt)]
-#[structopt(name = "render-features")]
+/// render map features as a SVG
+#[derive(Debug, FromArgs)]
+#[argh(name = "render-features")]
 struct Args {
-    /// Osmflat archive
-    #[structopt(parse(from_os_str))]
+    /// osmflat archive
+    #[argh(positional)]
     osmflat_archive: PathBuf,
 
     /// SVG filename to output
-    #[structopt(short, long, parse(from_os_str))]
+    #[argh(option, short = 'o')]
     output: PathBuf,
 
-    /// Width of the image
-    #[structopt(short, long, default_value = "800")]
+    /// width of the image
+    #[argh(option, short = 'w', default = "800")]
     width: u32,
 
-    /// Height of the image
-    #[structopt(short, long, default_value = "600")]
+    /// height of the image
+    #[argh(option, short = 'h', default = "600")]
     height: u32,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let args = Args::from_args();
+    let args: Args = argh::from_env();
 
     let storage = FileResourceStorage::new(args.osmflat_archive);
     let archive = Osm::open(storage)?;
