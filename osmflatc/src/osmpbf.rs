@@ -1,3 +1,5 @@
+#![allow(unknown_lints, clippy::derive_partial_eq_without_eq)]
+
 use byteorder::{ByteOrder, NetworkEndian};
 use flate2::read::ZlibDecoder;
 use log::info;
