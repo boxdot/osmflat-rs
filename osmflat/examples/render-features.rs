@@ -17,7 +17,7 @@
 //!
 //! The code in this example file is released into the Public Domain.
 
-use argh::FromArgs;
+use clap::Parser;
 use osmflat::{
     iter_tags, FileResourceStorage, Node, Osm, Relation, RelationMembersRef, Way, COORD_SCALE,
 };
@@ -349,28 +349,27 @@ where
 }
 
 /// render map features as a SVG
-#[derive(Debug, FromArgs)]
-#[argh(name = "render-features")]
+#[derive(Debug, Parser)]
+#[clap(name = "render-features")]
 struct Args {
     /// osmflat archive
-    #[argh(positional)]
     osmflat_archive: PathBuf,
 
     /// SVG filename to output
-    #[argh(option, short = 'o')]
+    #[clap(long, short = 'o')]
     output: PathBuf,
 
     /// width of the image
-    #[argh(option, short = 'w', default = "800")]
+    #[clap(long, short = 'w', default_value = "800")]
     width: u32,
 
     /// height of the image
-    #[argh(option, short = 'h', default = "600")]
+    #[clap(long, short = 'h', default_value = "600")]
     height: u32,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let args: Args = argh::from_env();
+    let args = Args::parse();
 
     let storage = FileResourceStorage::new(args.osmflat_archive);
     let archive = Osm::open(storage)?;

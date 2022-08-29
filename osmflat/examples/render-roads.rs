@@ -6,7 +6,7 @@
 
 use osmflat::{find_tag_by, FileResourceStorage, Node, Osm, Way, COORD_SCALE};
 
-use argh::FromArgs;
+use clap::Parser;
 use itertools::Itertools;
 
 use std::f64::consts::PI;
@@ -179,22 +179,21 @@ fn render(archive: &Osm, width: u32) -> Image {
     image
 }
 
-/// renders roads as a PNG
-#[derive(FromArgs, Debug)]
+/// Renders roads as a PNG
+#[derive(Debug, Parser)]
 struct Args {
     /// input osmflat archive
-    #[argh(positional)]
     input: PathBuf,
     /// output PNG filename
-    #[argh(option, short = 'o')]
+    #[clap(long, short = 'o')]
     output: PathBuf,
     /// width of the image (height is derived from ratio)
-    #[argh(option, short = 'w', default = "4320")]
+    #[clap(long, short = 'w', default_value = "4320")]
     width: u32,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let args: Args = argh::from_env();
+    let args = Args::parse();
 
     let archive = Osm::open(FileResourceStorage::new(args.input))?;
 
