@@ -9,13 +9,13 @@ use crate::osmpbf::{build_block_index, read_block, BlockIndex, BlockType};
 use crate::stats::Stats;
 use crate::strings::StringTable;
 
+use clap::Parser;
 use colored::*;
 use flatdata::FileResourceStorage;
 use itertools::Itertools;
 use log::info;
 use memmap::Mmap;
 use pbr::ProgressBar;
-use structopt::StructOpt;
 
 use std::collections::{hash_map, HashMap};
 use std::fs::File;
@@ -602,7 +602,7 @@ fn run(args: args::Args) -> Result<(), Error> {
 }
 
 fn main() {
-    let args = args::Args::from_args();
+    let args = args::Args::parse();
     let level = match args.verbose {
         0 => "info",
         1 => "debug",
