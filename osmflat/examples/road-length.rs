@@ -21,7 +21,7 @@ struct Coords {
 }
 
 impl Coords {
-    fn from_node(node: &Node, coord_scale: u64) -> Self {
+    fn from_node(node: &Node, coord_scale: i32) -> Self {
         Self {
             lat: node.lat() as f64 / coord_scale as f64,
             lon: node.lon() as f64 / coord_scale as f64,

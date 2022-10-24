@@ -27,7 +27,7 @@ type Error = Box<dyn std::error::Error>;
 
 fn serialize_header(
     header_block: &osmpbf::HeaderBlock,
-    coord_scale: u64,
+    coord_scale: i32,
     builder: &osmflat::OsmBuilder,
     stringtable: &mut StringTable,
 ) -> io::Result<()> {
@@ -36,10 +36,10 @@ fn serialize_header(
     header.set_coord_scale(coord_scale);
 
     if let Some(ref bbox) = header_block.bbox {
-        header.set_bbox_left(bbox.left / (1000000000 / coord_scale) as i64);
-        header.set_bbox_right(bbox.right / (1000000000 / coord_scale) as i64);
-        header.set_bbox_top(bbox.top / (1000000000 / coord_scale) as i64);
-        header.set_bbox_bottom(bbox.bottom / (1000000000 / coord_scale) as i64);
+        header.set_bbox_left((bbox.left / (1000000000 / coord_scale) as i64) as i32);
+        header.set_bbox_right((bbox.right / (1000000000 / coord_scale) as i64) as i32);
+        header.set_bbox_top((bbox.top / (1000000000 / coord_scale) as i64) as i32);
+        header.set_bbox_bottom((bbox.bottom / (1000000000 / coord_scale) as i64) as i32);
     };
 
     header.set_writingprogram_idx(stringtable.insert("osmflatc"));
@@ -166,7 +166,7 @@ fn add_string_table(
 
 fn serialize_dense_nodes(
     block: &osmpbf::PrimitiveBlock,
-    granularity: u64,
+    granularity: i32,
     nodes: &mut flatdata::ExternalVector<osmflat::Node>,
     node_ids: &mut Option<flatdata::ExternalVector<osmflat::Id>>,
     nodes_id_to_idx: &mut ids::IdTableBuilder,
@@ -200,8 +200,12 @@ fn serialize_dense_nodes(
 
             lat += dense_nodes.lat[i];
             lon += dense_nodes.lon[i];
-            node.set_lat((lat_offset + (i64::from(pbf_granularity) * lat)) / granularity as i64);
-            node.set_lon((lon_offset + (i64::from(pbf_granularity) * lon)) / granularity as i64);
+            node.set_lat(
+                ((lat_offset + (i64::from(pbf_granularity) * lat)) / granularity as i64) as i32,
+            );
+            node.set_lon(
+                ((lon_offset + (i64::from(pbf_granularity) * lon)) / granularity as i64) as i32,
+            );
 
             if tags_offset < dense_nodes.keys_vals.len() {
                 node.set_tag_first_idx(tags.next_index());
@@ -397,7 +401,7 @@ fn serialize_relations(
 
 fn serialize_dense_node_blocks(
     builder: &osmflat::OsmBuilder,
-    granularity: u64,
+    granularity: i32,
     mut node_ids: Option<flatdata::ExternalVector<osmflat::Id>>,
     blocks: Vec<BlockIndex>,
     data: &[u8],
@@ -563,7 +567,7 @@ fn serialize_relation_blocks(
     Ok(())
 }
 
-fn gcd(a: u64, b: u64) -> u64 {
+fn gcd(a: i32, b: i32) -> i32 {
     let (mut x, mut y) = (a.min(b), a.max(b));
     while x > 1 {
         y %= x;
@@ -596,7 +600,8 @@ fn run(args: args::Args) -> Result<(), Error> {
         if block.block_type == BlockType::DenseNodes {
             // only DenseNodes have coordinate we need to scale
             if let Some(block_granularity) = block.granularity {
-                greatest_common_granularity = gcd(greatest_common_granularity, block_granularity);
+                greatest_common_granularity =
+                    gcd(greatest_common_granularity, block_granularity as i32);
             }
         }
     }
