@@ -19,52 +19,45 @@ pub enum BlockType {
     Relations,
 }
 
-impl BlockType {
-    /// Decode block type from PrimitiveBlock protobuf message
-    ///
-    /// This does not decode any fields, it just checks which tags are present
-    /// in PrimitiveGroup fields of the message.
-    ///
-    /// `blob` should contain decompressed data of an OSMData PrimitiveBlock.
-    ///
-    /// Note: We use public API of `prost` crate, which though is not exposed in
-    /// the crate and marked with comment that it should be only used from
-    /// `prost::Message`.
-    pub fn from_osmdata_blob(mut blob: &[u8]) -> io::Result<BlockType> {
-        const PRIMITIVE_GROUP_TAG: u32 = 2;
-        const NODES_TAG: u32 = 1;
-        const DENSE_NODES_TAG: u32 = 2;
-        const WAY_STAG: u32 = 3;
-        const RELATIONS_TAG: u32 = 4;
-        const CHANGESETS_TAG: u32 = 5;
+/// Decode block type from PrimitiveBlock protobuf message
+///
+/// This does not decode any fields, it just checks which tags are present
+/// in PrimitiveGroup fields of the message.
+///
+/// `blob` should contain decompressed data of an OSMData PrimitiveBlock.
+///
+/// Note: We use public API of `prost` crate, which though is not exposed in
+/// the crate and marked with comment that it should be only used from
+/// `prost::Message`.
+pub fn type_and_granularity_from_osmdata_blob(mut blob: &[u8]) -> io::Result<(BlockType, u64)> {
+    const PRIMITIVE_GROUP_TAG: u32 = 2;
+    const GRANULARITY_TAG: u32 = 17;
+    const NODES_TAG: u32 = 1;
+    const DENSE_NODES_TAG: u32 = 2;
+    const WAY_STAG: u32 = 3;
+    const RELATIONS_TAG: u32 = 4;
+    const CHANGESETS_TAG: u32 = 5;
 
-        loop {
-            // decode fields of PrimitiveBlock
-            let (key, wire_type) = prost::encoding::decode_key(&mut blob)?;
-            if key != PRIMITIVE_GROUP_TAG {
-                // primitive group
-                prost::encoding::skip_field(
-                    wire_type,
-                    key,
-                    &mut blob,
-                    prost::encoding::DecodeContext::default(),
-                )?;
-                continue;
-            }
-
+    let mut block_type = None;
+    let mut granularity = 100; // default value
+    while !blob.is_empty() {
+        // decode fields of PrimitiveBlock
+        let (key, wire_type) = prost::encoding::decode_key(&mut blob)?;
+        let blob_copy = blob.clone();
+        if key == PRIMITIVE_GROUP_TAG {
             // We found a PrimitiveGroup field. There could be several of them, but
             // follwoing the specs of OSMPBF, all of them will have the same single
             // optional field, which defines the type of the block.
 
             // Decode the number of primitive groups.
-            let _ = prost::encoding::decode_varint(&mut blob)?;
+            let _ = prost::encoding::decode_varint(&mut blob_copy)?;
             // Decode the tag of the first primitive group defining the type.
-            let (tag, _wire_type) = prost::encoding::decode_key(&mut blob)?;
-            let block_type = match tag {
-                NODES_TAG => BlockType::Nodes,
-                DENSE_NODES_TAG => BlockType::DenseNodes,
-                WAY_STAG => BlockType::Ways,
-                RELATIONS_TAG => BlockType::Relations,
+            let (tag, _wire_type) = prost::encoding::decode_key(&mut blob_copy)?;
+            block_type = match tag {
+                NODES_TAG => Some(BlockType::Nodes),
+                DENSE_NODES_TAG => Some(BlockType::DenseNodes),
+                WAY_STAG => Some(BlockType::Ways),
+                RELATIONS_TAG => Some(BlockType::Relations),
                 CHANGESETS_TAG => {
                     panic!("found block containing unsupported changesets");
                 }
@@ -72,14 +65,27 @@ impl BlockType {
                     panic!("invalid input data: malformed primitive block");
                 }
             };
-            return Ok(block_type);
+        } else if key == GRANULARITY_TAG {
+            granularity = prost::encoding::decode_varint(&mut blob_copy)?;
         }
+        // skip payload
+        prost::encoding::skip_field(
+            wire_type,
+            key,
+            &mut blob,
+            prost::encoding::DecodeContext::default(),
+        )?;
+    }
+    match block_type {
+        None => panic!("Found block without primitive group"),
+        Some(x) => Ok((x, granularity)),
     }
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
 pub struct BlockIndex {
     pub block_type: BlockType,
+    pub granularity: Option<u64>,
     pub blob_start: usize,
     pub blob_len: usize,
 }
@@ -119,6 +125,7 @@ impl<'a> BlockIndexIterator<'a> {
             self.cursor += blob_len;
             Ok(BlobInfo::Header(BlockIndex {
                 block_type: BlockType::Header,
+                granularity: None,
                 blob_start,
                 blob_len,
             }))
@@ -170,7 +177,7 @@ pub fn read_block<T: prost::Message + Default>(
     Ok(T::decode(blob_data.as_slice())?)
 }
 
-fn blob_type_from_blob_info(
+fn blob_type_and_granularity_from_blob_info(
     blob_start: usize,
     blob_len: usize,
     blob: Vec<u8>,
@@ -195,8 +202,10 @@ fn blob_type_from_blob_info(
         blob.raw_size.unwrap_or(blob_data.len() as i32) as usize
     );
 
+    let (block_type, granularity) = type_and_granularity_from_osmdata_blob(&blob_data[..])?;
     Ok(BlockIndex {
-        block_type: BlockType::from_osmdata_blob(&blob_data[..])?,
+        block_type,
+        granularity: Some(granularity),
         blob_start,
         blob_len,
     })
@@ -209,7 +218,7 @@ pub fn build_block_index(pbf_data: &[u8]) -> Vec<BlockIndex> {
             let block = match blob {
                 Ok(BlobInfo::Header(b)) => Ok(b),
                 Ok(BlobInfo::Unknown(start, len, blob)) => {
-                    blob_type_from_blob_info(start, len, blob)
+                    blob_type_and_granularity_from_blob_info(start, len, blob)
                 }
                 Err(e) => Err(e),
             };

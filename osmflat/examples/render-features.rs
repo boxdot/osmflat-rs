@@ -18,9 +18,7 @@
 //! The code in this example file is released into the Public Domain.
 
 use clap::Parser;
-use osmflat::{
-    iter_tags, FileResourceStorage, Node, Osm, Relation, RelationMembersRef, Way, COORD_SCALE,
-};
+use osmflat::{iter_tags, FileResourceStorage, Node, Osm, Relation, RelationMembersRef, Way};
 use smallvec::{smallvec, SmallVec};
 use svg::{
     node::{self, element},
@@ -58,11 +56,11 @@ impl GeoCoord {
 }
 
 /// Convert osmflat Node into GeoCoord.
-impl From<&Node> for GeoCoord {
-    fn from(node: &Node) -> Self {
+impl GeoCoord {
+    fn from_node(node: &Node, coord_scale: u64) -> Self {
         Self {
-            lat: node.lat() as f64 / COORD_SCALE as f64,
-            lon: node.lon() as f64 / COORD_SCALE as f64,
+            lat: node.lat() as f64 / coord_scale as f64,
+            lon: node.lon() as f64 / coord_scale as f64,
         }
     }
 }
@@ -86,12 +84,16 @@ impl Polyline {
         let nodes_index = archive.nodes_index();
         let nodes = archive.nodes();
         let mut indices = self.inner.iter().cloned().flatten();
+        let scale = archive.header().coord_scale();
         if indices.any(|idx| nodes_index[idx as usize].value().is_none()) {
             None
         } else {
             let indices = self.inner.into_iter().flatten();
             Some(indices.map(move |idx| {
-                (&nodes[nodes_index[idx as usize].value().unwrap() as usize]).into()
+                GeoCoord::from_node(
+                    &nodes[nodes_index[idx as usize].value().unwrap() as usize],
+                    scale,
+                )
             }))
         }
     }

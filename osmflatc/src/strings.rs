@@ -66,10 +66,6 @@ impl StringTable {
         Default::default()
     }
 
-    pub fn next_index(&self) -> u64 {
-        self.size_in_bytes
-    }
-
     /// Inserts a string into string table and returns its index.
     ///
     /// If the string was already inserted before, the string is deduplicated

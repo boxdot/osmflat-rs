@@ -21,10 +21,10 @@ struct Coords {
 }
 
 impl Coords {
-    fn from_node(node: &Node) -> Self {
+    fn from_node(node: &Node, coord_scale: u64) -> Self {
         Self {
-            lat: node.lat() as f64 / osmflat::COORD_SCALE as f64,
-            lon: node.lon() as f64 / osmflat::COORD_SCALE as f64,
+            lat: node.lat() as f64 / coord_scale as f64,
+            lon: node.lon() as f64 / coord_scale as f64,
         }
     }
 }
@@ -46,6 +46,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .nth(1)
         .ok_or("USAGE: road_length <osmflat-archive>")?;
     let archive = Osm::open(FileResourceStorage::new(archive_dir))?;
+    let header = archive.header();
 
     let tags = archive.tags();
     let tags_index = archive.tags_index();
@@ -71,6 +72,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // This is a common pattern when flattening 1 to n relations.
             Some(Coords::from_node(
                 &nodes[nodes_index[idx as usize].value()? as usize],
+                header.coord_scale(),
             ))
         });
         let length: Option<f64> = coords

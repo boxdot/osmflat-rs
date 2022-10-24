@@ -4,7 +4,7 @@
 //!
 //! The code in this example file is released into the Public Domain.
 
-use osmflat::{find_tag_by, FileResourceStorage, Node, Osm, Way, COORD_SCALE};
+use osmflat::{find_tag_by, FileResourceStorage, Node, Osm, Way};
 
 use clap::Parser;
 use itertools::Itertools;
@@ -22,11 +22,11 @@ struct GeoCoord {
 }
 
 /// Convert osmflat Node into GeoCoord.
-impl From<&Node> for GeoCoord {
-    fn from(node: &Node) -> Self {
+impl GeoCoord {
+    fn from_node(node: &Node, coord_scale: u64) -> Self {
         Self {
-            lat: node.lat() as f64 / COORD_SCALE as f64,
-            lon: node.lon() as f64 / COORD_SCALE as f64,
+            lat: node.lat() as f64 / coord_scale as f64,
+            lon: node.lon() as f64 / coord_scale as f64,
         }
     }
 }
@@ -84,10 +84,15 @@ fn way_coords<'a>(archive: &'a Osm, way: &Way) -> Option<impl Iterator<Item = Ge
     let nodes = archive.nodes();
     let nodes_index = archive.nodes_index();
     let path = way.refs().map(move |i| &nodes_index[i as usize]);
+    let scale = archive.header().coord_scale();
     if path.clone().any(|node| node.value().is_none()) {
         None
     } else {
-        Some(path.map(move |node| (&nodes[node.value().unwrap() as usize]).into()))
+        Some(
+            path.map(move |node| {
+                GeoCoord::from_node(&nodes[node.value().unwrap() as usize], scale)
+            }),
+        )
     }
 }
 

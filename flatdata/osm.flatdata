@@ -9,31 +9,23 @@ namespace osm {
 const u64 INVALID_IDX = 0xFFFFFFFFFF;
 
 /**
- * All coordinate are scaled by this constant to convert them to integers.
- */
-const u64 COORD_SCALE = 1000000000;
-
-/**
  * Metadata attached to the archive.
  */
 struct Header {
-    /// Bounding box (min longitude scaled with `COORD_SCALE`)
-    bbox_left: i64 : 40;
-    /// Bounding box (max longitude scaled with `COORD_SCALE`)
-    bbox_right: i64 : 40;
-    /// Bounding box (max latitude scaled with `COORD_SCALE`)
-    bbox_top: i64 : 40;
-    /// Bounding box (min latitude scaled with `COORD_SCALE`)
-    bbox_bottom: i64 : 40;
+    /**
+     * All coordinates in this archive are scaled by this constant
+     * To get the original degree-based coordinate back compute (latitude/coord_scale,longitude/coord_scale)
+     */
+    coord_scale: i32;
 
-    /// Reference to the first required feature in `stringtable`.
-    required_feature_first_idx: u64 : 40;
-    /// Number of required features.
-    required_features_size: u32 : 4;
-    /// Reference to the first optional feature in `stringtable`.
-    optional_feature_first_idx: u64 : 40;
-    /// Number of optional features.
-    optional_features_size: u32 : 4;
+    /// Bounding box (min longitude scaled with `header.coord_scale`)
+    bbox_left: i32 : 32;
+    /// Bounding box (max longitude scaled with `header.coord_scale`)
+    bbox_right: i32 : 32;
+    /// Bounding box (max latitude scaled with `header.coord_scale`)
+    bbox_top: i32 : 32;
+    /// Bounding box (min latitude scaled with `header.coord_scale`)
+    bbox_bottom: i32 : 32;
 
     /// Writing program used to write the data (reference to `stringtable`).
     writingprogram_idx: u64 : 40;
@@ -46,17 +38,17 @@ struct Header {
      *
      * [`state.txt`]: https://wiki.openstreetmap.org/wiki/Planet.osm/diffs#Minute.2C_Hour.2C_and_Day_Files_Organisation
      */
-    osmosis_replication_timestamp: i64 : 64;
+    replication_timestamp: i64 : 64;
     /**
      * Replication sequence number (`sequenceNumber` from [`state.txt`]).
      *
      * [`state.txt`]: https://wiki.openstreetmap.org/wiki/Planet.osm/diffs#Minute.2C_Hour.2C_and_Day_Files_Organisation
      */
-    osmosis_replication_sequence_number: i64 : 64;
+    replication_sequence_number: i64 : 64;
     /**
      * Replication base URL (reference to `stringtable`).
      */
-    osmosis_replication_base_url_idx: u64 : 40;
+    replication_base_url_idx: u64 : 40;
 }
 
 /**
@@ -77,12 +69,10 @@ struct Tag {
  * See <https://wiki.openstreetmap.org/wiki/Node>.
  */
 struct Node {
-    /// Unique node ID
-    id: i64 : 40;
-    /// Latitude (scaled with `COORD_SCALE`).
-    lat: i64 : 40;
-    /// Longitude (scaled with `COORD_SCALE`).
-    lon: i64 : 40;
+    /// Latitude (scaled with `header.coord_scale`).
+    lat: i32 : 32;
+    /// Longitude (scaled with `header.coord_scale`).
+    lon: i32 : 32;
     /**
      * Range of tags attached to this node.
      *
@@ -107,8 +97,6 @@ struct NodeIndex {
  * See <https://wiki.openstreetmap.org/wiki/Way>.
  */
 struct Way {
-    /// Unique ID of the way.
-    id: i64 : 40;
     /**
      * Range of tags attached to this node.
      *
@@ -178,8 +166,6 @@ struct RelationMember {
  * See <https://wiki.openstreetmap.org/wiki/Relation>.
  */
 struct Relation {
-    /// Unique ID of the relation.
-    id: i64 : 40;
     /**
      * Range of tags attached to this relation.
      *
@@ -187,6 +173,33 @@ struct Relation {
      */
     @range(tags)
     tag_first_idx: u64 : 40;
+}
+
+struct Id {
+    value: u64 : 40;
+}
+
+/**
+ * An optional sub-archive storing the original OSM ids of nodes, ways, and relations
+ */
+archive Ids {
+    /**
+     * List of OSM ids of all nodes in the parent archive
+     * nodes[i] has its id stored in ids.nodes[i]
+     */
+    nodes: vector< Id >;
+
+    /**
+     * List of OSM ids of all ways in the parent archive
+     * ways[i] has its id stored in ids.ways[i]
+     */
+    ways: vector< Id >;
+
+    /**
+     * List of OSM ids of all relations in the parent archive
+     * relations[i] has its id stored in ids.relations[i]
+     */
+    relations: vector< Id >;
 }
 
 /**
@@ -215,11 +228,9 @@ archive Osm {
     /**
      * Header which contains the metadata attached to the archive.
      */
-    @explicit_reference( Header.required_feature_first_idx, stringtable )
-    @explicit_reference( Header.optional_feature_first_idx, stringtable )
     @explicit_reference( Header.writingprogram_idx, stringtable )
     @explicit_reference( Header.source_idx, stringtable )
-    @explicit_reference( Header.osmosis_replication_base_url_idx, stringtable )
+    @explicit_reference( Header.replication_base_url_idx, stringtable )
     header: Header;
 
     /**
@@ -298,5 +309,8 @@ archive Osm {
      * List of strings separated by `\0`.
      */
     stringtable: raw_data;
+
+    @optional
+    ids: archive Ids;
 }
 } // namespace osm
