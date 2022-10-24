@@ -43,7 +43,7 @@ pub fn type_and_granularity_from_osmdata_blob(mut blob: &[u8]) -> io::Result<(Bl
     while !blob.is_empty() {
         // decode fields of PrimitiveBlock
         let (key, wire_type) = prost::encoding::decode_key(&mut blob)?;
-        let blob_copy = blob.clone();
+        let mut blob_copy = blob;
         if key == PRIMITIVE_GROUP_TAG {
             // We found a PrimitiveGroup field. There could be several of them, but
             // follwoing the specs of OSMPBF, all of them will have the same single

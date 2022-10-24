@@ -9,8 +9,8 @@
 //!
 //! The code in this example file is released into the Public Domain.
 
+use argh::FromArgs;
 use osmflat::{iter_tags, FileResourceStorage, Osm, RelationMembersRef};
-use structopt::StructOpt;
 
 use std::path::PathBuf;
 use std::str::{self, Utf8Error};
@@ -112,23 +112,22 @@ impl<'ar> Member<'ar> {
     }
 }
 
-#[derive(StructOpt, Debug)]
+/// output osmflatdata: nodes, ways, and/or relations
+#[derive(FromArgs, Debug)]
 struct Args {
-    /// Input osmflat archive
-    #[structopt(parse(from_os_str))]
+    /// input osmflat archive
+    #[argh(positional)]
     input: PathBuf,
-    /// Output PNG filename
-    #[structopt(
-        help = "Which types to print: (n)odes, (w)ays, or (r)elations",
-        default_value = "nwr"
-    )]
+    /// which types to print: (n)odes, (w)ays, or (r)elations
+    #[argh(option, default = "\"nwr\".to_string()")]
     types: String,
-    #[structopt(long, help = "Amount of entities to print")]
+    /// amount of entities to print
+    #[argh(option)]
     num: Option<usize>,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let args = Args::from_args();
+    let args: Args = argh::from_env();
     let archive = Osm::open(FileResourceStorage::new(args.input))?;
 
     let header = archive.header();
