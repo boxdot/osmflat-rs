@@ -14,7 +14,7 @@ use colored::*;
 use flatdata::FileResourceStorage;
 use itertools::Itertools;
 use log::info;
-use memmap::Mmap;
+use memmap2::Mmap;
 use pbr::ProgressBar;
 
 use std::collections::{hash_map, HashMap};
