@@ -399,6 +399,7 @@ fn serialize_relations(
     Ok(stats)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn serialize_dense_node_blocks(
     builder: &osmflat::OsmBuilder,
     granularity: i32,
@@ -450,6 +451,7 @@ fn serialize_dense_node_blocks(
 
 type PrimitiveBlockWithIds = (osmpbf::PrimitiveBlock, (Vec<Option<u64>>, Stats));
 
+#[allow(clippy::too_many_arguments)]
 fn serialize_way_blocks(
     builder: &osmflat::OsmBuilder,
     mut way_ids: Option<flatdata::ExternalVector<osmflat::Id>>,
