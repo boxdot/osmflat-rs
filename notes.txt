@@ -1,0 +1,1 @@
+flatdata-generator -s /Users/n/code/osmflat-rs/flatdata/osm.flatdata -g rust -O /Users/n/code/osmflat-rs/osmflat/src/exp_gen.rs 

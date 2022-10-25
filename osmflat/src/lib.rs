@@ -36,7 +36,7 @@
 //! [examples]: https://github.com/boxdot/osmflat-rs/tree/master/osmflat/examples
 
 // generated osm module
-include!("osmflat_generated.rs");
+include!("exp_gen.rs");
 
 mod tags;
 

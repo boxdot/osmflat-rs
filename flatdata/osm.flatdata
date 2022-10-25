@@ -92,6 +92,11 @@ struct Node {
     tag_first_idx: u64 : 40;
 }
 
+struct NodeHilbertIdx {
+    i: i64: 64;
+    h: i64: 64;
+}
+
 /**
  * Index of a node.
  */
