@@ -251,6 +251,7 @@ fn resolve_ways(
     (result, stats)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn serialize_ways(
     block: &osmpbf::PrimitiveBlock,
     nodes_id_to_idx: &[Option<u64>],
