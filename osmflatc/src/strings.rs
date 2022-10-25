@@ -89,7 +89,7 @@ impl StringTable {
             .is_none()
         {
             self.data
-                .push(Vec::with_capacity((1024 * 1024 * 4).max(s.len())));
+                .push(Vec::with_capacity((1024 * 1024 * 4).max(s.len() + 1)));
         }
         // unwrap is ok here, since we just ensured that there is always one entry
         let buffer = self.data.last_mut().unwrap();
@@ -148,6 +148,22 @@ mod test {
         let bytes = st.into_bytes();
         println!("{}", ::std::str::from_utf8(&bytes).unwrap());
         assert_eq!(bytes, b"hello\0world\0!\0");
+    }
+
+    #[test]
+    fn test_large_insert() {
+        let mut st = StringTable::new();
+        assert_eq!(st.insert("hello"), 0);
+        assert_eq!(st.insert(&str::repeat("x", 1024 * 1024 * 5)), 6);
+        assert_eq!(st.insert("huh"), 1024 * 1024 * 5 + 1 + 6);
+        assert_eq!(st.insert(&str::repeat("x", 1024 * 1024 * 5)), 6);
+        assert_eq!(st.insert("hello"), 0);
+
+        let bytes = st.into_bytes();
+        assert_eq!(
+            bytes,
+            ("hello\0".to_string() + &str::repeat("x", 1024 * 1024 * 5) + "\0huh\0").as_bytes()
+        );
     }
 
     #[derive(Debug, Default)]
