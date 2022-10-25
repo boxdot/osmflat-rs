@@ -17,6 +17,7 @@ edition = "2018"
 [dependencies]
 fast_hilbert = "1.0.1"
 flatdata = "0.5.2"
+memmap2 = "0.5.7"
 
 [dev-dependencies]
 clap = { version = "3.2.17", features = ["derive"] }

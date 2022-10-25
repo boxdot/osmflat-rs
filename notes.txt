@@ -5,3 +5,5 @@ cd ../osmflatc
 cargo run --release -- /Users/n/geodata/extracts/california.osm.pbf /Users/n/geodata/flatdata/california
 cd ../osmflat
 cargo run --example debug -- /Users/n/geodata/flatdata/california n
+
+cargo run --example sort_hilbert -- /Users/n/geodata/flatdata/california
