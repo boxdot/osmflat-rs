@@ -223,7 +223,7 @@
                     "kind": "example"
                 }
             },
-            "args": ["/Users/n/geodata/flatdata/santacruz", "n"],
+            "args": ["/Users/n/geodata/flatdata/california", "n"],
             "cwd": "${workspaceFolder}"
         },
         {
