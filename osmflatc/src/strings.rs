@@ -168,7 +168,7 @@ mod test {
 
     proptest! {
         #[test]
-        fn sequence_of_insert(ref seq in prop::collection::vec(".*", 1..100))
+        fn sequence_of_insert(ref seq in prop::collection::vec("[^\x00]*", 1..100))
         {
             let mut st = StringTable::new();
             let mut reference_st = ReferenceStringTable::default();
