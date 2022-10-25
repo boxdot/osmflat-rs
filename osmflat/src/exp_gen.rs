@@ -667,15 +667,15 @@ unsafe impl flatdata::NoOverlap for NodeHilbertIdx {}
 
 impl NodeHilbertIdx {
     #[inline]
-    pub fn i(&self) -> i64 {
-        let value = flatdata_read_bytes!(i64, self.data.as_ptr(), 0, 64);
-        unsafe { std::mem::transmute::<i64, i64>(value) }
+    pub fn i(&self) -> u64 {
+        let value = flatdata_read_bytes!(u64, self.data.as_ptr(), 0, 64);
+        unsafe { std::mem::transmute::<u64, u64>(value) }
     }
 
     #[inline]
-    pub fn h(&self) -> i64 {
-        let value = flatdata_read_bytes!(i64, self.data.as_ptr(), 64, 64);
-        unsafe { std::mem::transmute::<i64, i64>(value) }
+    pub fn h(&self) -> u64 {
+        let value = flatdata_read_bytes!(u64, self.data.as_ptr(), 64, 64);
+        unsafe { std::mem::transmute::<u64, u64>(value) }
     }
 
 }
@@ -698,14 +698,14 @@ impl std::cmp::PartialEq for NodeHilbertIdx {
 impl NodeHilbertIdx {
     #[inline]
     #[allow(missing_docs)]
-    pub fn set_i(&mut self, value: i64) {
-        flatdata_write_bytes!(i64; value, self.data, 0, 64)
+    pub fn set_i(&mut self, value: u64) {
+        flatdata_write_bytes!(u64; value, self.data, 0, 64)
     }
 
     #[inline]
     #[allow(missing_docs)]
-    pub fn set_h(&mut self, value: i64) {
-        flatdata_write_bytes!(i64; value, self.data, 64, 64)
+    pub fn set_h(&mut self, value: u64) {
+        flatdata_write_bytes!(u64; value, self.data, 64, 64)
     }
 
 
@@ -1739,6 +1739,7 @@ pub struct Osm {
     _storage: flatdata::StorageHandle,
     header : &'static super::osm::Header,
     nodes : &'static [super::osm::Node],
+    node_hilbert_index : &'static [super::osm::NodeHilbertIdx],
     ways : &'static [super::osm::Way],
     relations : &'static [super::osm::Relation],
     relation_members : flatdata::MultiArrayView<'static, RelationMembers>,
@@ -1765,6 +1766,11 @@ impl Osm {
     #[inline]
     pub fn nodes(&self) -> &[super::osm::Node] {
         self.nodes
+    }
+
+    #[inline]
+    pub fn node_hilbert_index(&self) -> &[super::osm::NodeHilbertIdx] {
+        self.node_hilbert_index
     }
 
     /// List of ways.
@@ -1837,6 +1843,7 @@ impl ::std::fmt::Debug for Osm {
         f.debug_struct("Osm")
             .field("header", &self.header())
             .field("nodes", &self.nodes())
+            .field("node_hilbert_index", &self.node_hilbert_index())
             .field("ways", &self.ways())
             .field("relations", &self.relations())
             .field("relation_members", &self.relation_members())
@@ -1873,6 +1880,12 @@ impl Osm {
             let max_size = Some(1099511627776);
             let resource = extend(storage.read("nodes", schema::osm::resources::NODES));
             check("nodes", |r| r.len(), max_size, resource.and_then(|x| <&[super::osm::Node]>::from_bytes(x)))?
+        };
+        let node_hilbert_index = {
+            use flatdata::check_resource as check;
+            let max_size = None;
+            let resource = extend(storage.read("node_hilbert_index", schema::osm::resources::NODE_HILBERT_INDEX));
+            check("node_hilbert_index", |r| r.len(), max_size, resource.and_then(|x| <&[super::osm::NodeHilbertIdx]>::from_bytes(x)))?
         };
         let ways = {
             use flatdata::check_resource as check;
@@ -1937,6 +1950,7 @@ impl Osm {
             _storage: storage,
             header,
             nodes,
+            node_hilbert_index,
             ways,
             relations,
             relation_members,
@@ -1987,6 +2001,28 @@ impl OsmBuilder {
     #[inline]
     pub fn start_nodes(&self) -> ::std::io::Result<flatdata::ExternalVector<super::osm::Node>> {
         flatdata::create_external_vector(&*self.storage, "nodes", schema::osm::resources::NODES)
+    }
+
+    #[inline]
+    /// Stores [`node_hilbert_index`] in the archive.
+    ///
+    /// [`node_hilbert_index`]: struct.Osm.html#method.node_hilbert_index
+    pub fn set_node_hilbert_index(&self, vector: &[super::osm::NodeHilbertIdx]) -> ::std::io::Result<()> {
+        use flatdata::SliceExt;
+        self.storage.write("node_hilbert_index", schema::osm::resources::NODE_HILBERT_INDEX, vector.as_bytes())
+    }
+
+    /// Opens [`node_hilbert_index`] in the archive for buffered writing.
+    ///
+    /// Elements can be added to the vector until the [`ExternalVector::close`] method
+    /// is called. To flush the data fully into the archive, this method must be called
+    /// in the end.
+    ///
+    /// [`node_hilbert_index`]: struct.Osm.html#method.node_hilbert_index
+    /// [`ExternalVector::close`]: flatdata/struct.ExternalVector.html#method.close
+    #[inline]
+    pub fn start_node_hilbert_index(&self) -> ::std::io::Result<flatdata::ExternalVector<super::osm::NodeHilbertIdx>> {
+        flatdata::create_external_vector(&*self.storage, "node_hilbert_index", schema::osm::resources::NODE_HILBERT_INDEX)
     }
 
     #[inline]
@@ -2167,6 +2203,14 @@ struct Node
 }
 
 namespace osm {
+struct NodeHilbertIdx
+{
+    i : u64 : 64;
+    h : u64 : 64;
+}
+}
+
+namespace osm {
 struct Way
 {
     id : i64 : 40;
@@ -2256,6 +2300,7 @@ archive Osm
     header : .osm.Header;
     @explicit_reference( .osm.Node.tag_first_idx, .osm.Osm.tags_index )
     nodes : vector< .osm.Node >;
+    node_hilbert_index : vector< .osm.NodeHilbertIdx >;
     @explicit_reference( .osm.Way.tag_first_idx, .osm.Osm.tags_index )
     @explicit_reference( .osm.Way.ref_first_idx, .osm.Osm.nodes_index )
     ways : vector< .osm.Way >;
@@ -2330,6 +2375,22 @@ archive Osm
 {
     @explicit_reference( .osm.Node.tag_first_idx, .osm.Osm.tags_index )
     nodes : vector< .osm.Node >;
+}
+}
+
+"#;
+pub const NODE_HILBERT_INDEX: &str = r#"namespace osm {
+struct NodeHilbertIdx
+{
+    i : u64 : 64;
+    h : u64 : 64;
+}
+}
+
+namespace osm {
+archive Osm
+{
+    node_hilbert_index : vector< .osm.NodeHilbertIdx >;
 }
 }
 

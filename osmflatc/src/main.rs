@@ -21,6 +21,7 @@ use std::collections::{hash_map, HashMap};
 use std::fs::File;
 use std::io;
 use std::str;
+use fast_hilbert::xy2h;
 
 type Error = Box<dyn std::error::Error>;
 
@@ -141,6 +142,7 @@ fn add_string_table(
 fn serialize_dense_nodes(
     block: &osmpbf::PrimitiveBlock,
     nodes: &mut flatdata::ExternalVector<osmflat::Node>,
+    node_hilbert_index: &mut flatdata::ExternalVector<osmflat::NodeHilbertIdx>,
     nodes_id_to_idx: &mut ids::IdTableBuilder,
     stringtable: &mut StringTable,
     tags: &mut TagSerializer,
@@ -172,6 +174,13 @@ fn serialize_dense_nodes(
             lon += dense_nodes.lon[i];
             node.set_lat(lat_offset + (i64::from(granularity) * lat));
             node.set_lon(lon_offset + (i64::from(granularity) * lon));
+
+            let u_lon = (lon as i32 - i32::MIN) as u32;
+            let u_lat = (lat as i32 - i32::MIN) as u32;
+            let h = xy2h(u_lon, u_lat);
+            let node_hilbert = node_hilbert_index.grow()?;
+            node_hilbert.set_h(h);
+            node_hilbert.set_i(index);
 
             if tags_offset < dense_nodes.keys_vals.len() {
                 node.set_tag_first_idx(tags.next_index());
@@ -369,6 +378,7 @@ fn serialize_dense_node_blocks(
 ) -> Result<ids::IdTable, Error> {
     let mut nodes_id_to_idx = ids::IdTableBuilder::new();
     let mut nodes = builder.start_nodes()?;
+    let mut node_hilbert_index = builder.start_node_hilbert_index()?;
     let mut pb = ProgressBar::new(blocks.len() as u64);
     pb.message("Converting dense nodes...");
 
@@ -379,6 +389,7 @@ fn serialize_dense_node_blocks(
             *stats += serialize_dense_nodes(
                 &block?,
                 &mut nodes,
+                &mut node_hilbert_index,
                 &mut nodes_id_to_idx,
                 stringtable,
                 tags,

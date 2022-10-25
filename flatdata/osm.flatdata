@@ -93,8 +93,8 @@ struct Node {
 }
 
 struct NodeHilbertIdx {
-    i: i64: 64;
-    h: i64: 64;
+    i: u64: 64;
+    h: u64: 64;
 }
 
 /**
@@ -234,6 +234,8 @@ archive Osm {
      */
     @explicit_reference( Node.tag_first_idx, tags_index )
     nodes: vector<Node>;
+
+    node_hilbert_index: vector<NodeHilbertIdx>;
 
     /**
      * List of ways.

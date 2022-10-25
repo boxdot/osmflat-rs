@@ -21,6 +21,7 @@ clap = { version = "3.2.17", features = ["derive"] }
 colored = "2.0.0"
 crossbeam = "0.8.0"
 env_logger = "0.8.1"
+fast_hilbert = "1.0.1"
 flatdata = "0.5.3"
 flate2 = "1.0.18"
 inlinable_string = "0.1.11"

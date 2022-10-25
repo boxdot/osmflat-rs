@@ -15,6 +15,7 @@ readme = "README.md"
 edition = "2018"
 
 [dependencies]
+fast_hilbert = "1.0.1"
 flatdata = "0.5.2"
 
 [dev-dependencies]
