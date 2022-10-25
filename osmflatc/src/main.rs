@@ -378,13 +378,8 @@ fn serialize_dense_node_blocks(
         |idx| read_block(data, &idx),
         |block| -> Result<osmpbf::PrimitiveBlock, Error> {
             let block = block?;
-            *stats += serialize_dense_nodes(
-                &block,
-                &mut nodes,
-                &mut nodes_id_to_idx,
-                stringtable,
-                tags,
-            )?;
+            *stats +=
+                serialize_dense_nodes(&block, &mut nodes, &mut nodes_id_to_idx, stringtable, tags)?;
 
             pb.inc();
             Ok(block)
