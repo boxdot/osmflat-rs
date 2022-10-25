@@ -1,4 +1,7 @@
 flatdata-generator -s /Users/n/code/osmflat-rs/flatdata/osm.flatdata -g rust -O /Users/n/code/osmflat-rs/osmflat/src/exp_gen.rs 
 
 rm -rf /Users/n/geodata/flatdata/california/*
+cd ../osmflatc
 cargo run --release -- /Users/n/geodata/extracts/california.osm.pbf /Users/n/geodata/flatdata/california
+cd ../osmflat
+cargo run --example debug -- /Users/n/geodata/flatdata/california

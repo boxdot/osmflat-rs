@@ -64,6 +64,14 @@ struct Node<'ar> {
 }
 
 #[derive(Debug)]
+struct NodeHilbertIdx {
+    #[allow(unused)]
+    i: u64,
+    #[allow(unused)]
+    h: u64,
+}
+
+#[derive(Debug)]
 struct Way<'ar> {
     #[allow(unused)]
     id: i64,
@@ -183,7 +191,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // print nodes
     if types.contains('n') {
-        for node in &archive.nodes()[..3] {
+        for node in &archive.nodes()[..30] {
             let node = Node {
                 id: node.id(),
                 lat: FixedI64(node.lat()),
@@ -192,6 +200,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             };
 
             println!("{:#?}", node);
+        }
+        for nh in &archive.node_hilbert_index()[..30] {
+            let dnh = NodeHilbertIdx {
+                i: nh.i(),
+                h: nh.h(),
+            };
+            println!("{:#?}", dnh);
         }
     }
 

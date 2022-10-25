@@ -404,6 +404,7 @@ fn serialize_dense_node_blocks(
     // of the last node
     nodes.grow()?.set_tag_first_idx(tags.next_index());
     nodes.close()?;
+    node_hilbert_index.close()?;
     info!("Dense nodes converted.");
     info!("Building dense nodes index...");
     let nodes_id_to_idx = nodes_id_to_idx.build();
