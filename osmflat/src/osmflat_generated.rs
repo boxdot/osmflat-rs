@@ -7,45 +7,42 @@ use flatdata::{flatdata_read_bytes, flatdata_write_bytes};
 
     /// Special value which represents an invalid index.
 pub const INVALID_IDX: u64 = 1_099_511_627_775;
-
-    /// All coordinate are scaled by this constant to convert them to integers.
-pub const COORD_SCALE: u64 = 1_000_000_000;
 /// Metadata attached to the archive.
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct Header {
-    data: [u8; 62],
+    data: [u8; 51],
 }
 
 impl Header {
     /// Unsafe since the struct might not be self-contained
     pub unsafe fn new_unchecked( ) -> Self {
-        Self{data : [0; 62]}
+        Self{data : [0; 51]}
     }
 }
 
 impl flatdata::Struct for Header {
     unsafe fn create_unchecked( ) -> Self {
-        Self{data : [0; 62]}
+        Self{data : [0; 51]}
     }
 
-    const SIZE_IN_BYTES: usize = 62;
+    const SIZE_IN_BYTES: usize = 51;
     const IS_OVERLAPPING_WITH_NEXT : bool = false;
 }
 
 impl Header {
     pub fn new( ) -> Self {
-        Self{data : [0; 62]}
+        Self{data : [0; 51]}
     }
 
     /// Create reference from byte array of matching size
-    pub fn from_bytes(data: &[u8; 62]) -> &Self {
+    pub fn from_bytes(data: &[u8; 51]) -> &Self {
         // Safety: This is safe since Header is repr(transparent)
         unsafe{ std::mem::transmute( data ) }
     }
 
     /// Create reference from byte array of matching size
-    pub fn from_bytes_mut(data: &mut [u8; 62]) -> &mut Self {
+    pub fn from_bytes_mut(data: &mut [u8; 51]) -> &mut Self {
         // Safety: This is safe since Header is repr(transparent)
         unsafe{ std::mem::transmute( data ) }
     }
@@ -53,11 +50,11 @@ impl Header {
     /// Create reference from byte array
     pub fn from_bytes_slice(data: &[u8]) -> Result<&Self, flatdata::ResourceStorageError> {
         // We cannot rely on TryFrom here, since it does not yet support > 33 bytes
-        if data.len() < 62 {
-            assert_eq!(data.len(), 62);
+        if data.len() < 51 {
+            assert_eq!(data.len(), 51);
             return Err(flatdata::ResourceStorageError::UnexpectedDataSize);
         }
-        let ptr = data.as_ptr() as *const [u8; 62];
+        let ptr = data.as_ptr() as *const [u8; 51];
         // Safety: We checked length before
         Ok(Self::from_bytes(unsafe { &*ptr }))
     }
@@ -65,16 +62,16 @@ impl Header {
     /// Create reference from byte array
     pub fn from_bytes_slice_mut(data: &mut [u8]) -> Result<&mut Self, flatdata::ResourceStorageError> {
         // We cannot rely on TryFrom here, since it does not yet support > 33 bytes
-        if data.len() < 62 {
-            assert_eq!(data.len(), 62);
+        if data.len() < 51 {
+            assert_eq!(data.len(), 51);
             return Err(flatdata::ResourceStorageError::UnexpectedDataSize);
         }
-        let ptr = data.as_ptr() as *mut [u8; 62];
+        let ptr = data.as_ptr() as *mut [u8; 51];
         // Safety: We checked length before
         Ok(Self::from_bytes_mut(unsafe { &mut *ptr }))
     }
 
-    pub fn as_bytes(&self) -> &[u8; 62] {
+    pub fn as_bytes(&self) -> &[u8; 51] {
         &self.data
     }
 }
@@ -88,73 +85,53 @@ impl Default for Header {
 unsafe impl flatdata::NoOverlap for Header {}
 
 impl Header {
-    /// Bounding box (min longitude scaled with `COORD_SCALE`)
+    /// All coordinates in this archive are scaled by this constant
+/// To get the original degree-based coordinate back compute (latitude/coord_scale,longitude/coord_scale)
     #[inline]
-    pub fn bbox_left(&self) -> i64 {
-        let value = flatdata_read_bytes!(i64, self.data.as_ptr(), 0, 40);
-        unsafe { std::mem::transmute::<i64, i64>(value) }
+    pub fn coord_scale(&self) -> i32 {
+        let value = flatdata_read_bytes!(i32, self.data.as_ptr(), 0, 32);
+        unsafe { std::mem::transmute::<i32, i32>(value) }
     }
 
-    /// Bounding box (max longitude scaled with `COORD_SCALE`)
+    /// Bounding box (min longitude scaled with `header.coord_scale`)
     #[inline]
-    pub fn bbox_right(&self) -> i64 {
-        let value = flatdata_read_bytes!(i64, self.data.as_ptr(), 40, 40);
-        unsafe { std::mem::transmute::<i64, i64>(value) }
+    pub fn bbox_left(&self) -> i32 {
+        let value = flatdata_read_bytes!(i32, self.data.as_ptr(), 32, 32);
+        unsafe { std::mem::transmute::<i32, i32>(value) }
     }
 
-    /// Bounding box (max latitude scaled with `COORD_SCALE`)
+    /// Bounding box (max longitude scaled with `header.coord_scale`)
     #[inline]
-    pub fn bbox_top(&self) -> i64 {
-        let value = flatdata_read_bytes!(i64, self.data.as_ptr(), 80, 40);
-        unsafe { std::mem::transmute::<i64, i64>(value) }
+    pub fn bbox_right(&self) -> i32 {
+        let value = flatdata_read_bytes!(i32, self.data.as_ptr(), 64, 32);
+        unsafe { std::mem::transmute::<i32, i32>(value) }
     }
 
-    /// Bounding box (min latitude scaled with `COORD_SCALE`)
+    /// Bounding box (max latitude scaled with `header.coord_scale`)
     #[inline]
-    pub fn bbox_bottom(&self) -> i64 {
-        let value = flatdata_read_bytes!(i64, self.data.as_ptr(), 120, 40);
-        unsafe { std::mem::transmute::<i64, i64>(value) }
+    pub fn bbox_top(&self) -> i32 {
+        let value = flatdata_read_bytes!(i32, self.data.as_ptr(), 96, 32);
+        unsafe { std::mem::transmute::<i32, i32>(value) }
     }
 
-    /// Reference to the first required feature in `stringtable`.
+    /// Bounding box (min latitude scaled with `header.coord_scale`)
     #[inline]
-    pub fn required_feature_first_idx(&self) -> u64 {
-        let value = flatdata_read_bytes!(u64, self.data.as_ptr(), 160, 40);
-        unsafe { std::mem::transmute::<u64, u64>(value) }
-    }
-
-    /// Number of required features.
-    #[inline]
-    pub fn required_features_size(&self) -> u32 {
-        let value = flatdata_read_bytes!(u32, self.data.as_ptr(), 200, 4);
-        unsafe { std::mem::transmute::<u32, u32>(value) }
-    }
-
-    /// Reference to the first optional feature in `stringtable`.
-    #[inline]
-    pub fn optional_feature_first_idx(&self) -> u64 {
-        let value = flatdata_read_bytes!(u64, self.data.as_ptr(), 204, 40);
-        unsafe { std::mem::transmute::<u64, u64>(value) }
-    }
-
-    /// Number of optional features.
-    #[inline]
-    pub fn optional_features_size(&self) -> u32 {
-        let value = flatdata_read_bytes!(u32, self.data.as_ptr(), 244, 4);
-        unsafe { std::mem::transmute::<u32, u32>(value) }
+    pub fn bbox_bottom(&self) -> i32 {
+        let value = flatdata_read_bytes!(i32, self.data.as_ptr(), 128, 32);
+        unsafe { std::mem::transmute::<i32, i32>(value) }
     }
 
     /// Writing program used to write the data (reference to `stringtable`).
     #[inline]
     pub fn writingprogram_idx(&self) -> u64 {
-        let value = flatdata_read_bytes!(u64, self.data.as_ptr(), 248, 40);
+        let value = flatdata_read_bytes!(u64, self.data.as_ptr(), 160, 40);
         unsafe { std::mem::transmute::<u64, u64>(value) }
     }
 
     /// The origin (source) of the data.
     #[inline]
     pub fn source_idx(&self) -> u64 {
-        let value = flatdata_read_bytes!(u64, self.data.as_ptr(), 288, 40);
+        let value = flatdata_read_bytes!(u64, self.data.as_ptr(), 200, 40);
         unsafe { std::mem::transmute::<u64, u64>(value) }
     }
 
@@ -163,8 +140,8 @@ impl Header {
 ///
 /// [`state.txt`]: https://wiki.openstreetmap.org/wiki/Planet.osm/diffs#Minute.2C_Hour.2C_and_Day_Files_Organisation
     #[inline]
-    pub fn osmosis_replication_timestamp(&self) -> i64 {
-        let value = flatdata_read_bytes!(i64, self.data.as_ptr(), 328, 64);
+    pub fn replication_timestamp(&self) -> i64 {
+        let value = flatdata_read_bytes!(i64, self.data.as_ptr(), 240, 64);
         unsafe { std::mem::transmute::<i64, i64>(value) }
     }
 
@@ -172,15 +149,15 @@ impl Header {
 ///
 /// [`state.txt`]: https://wiki.openstreetmap.org/wiki/Planet.osm/diffs#Minute.2C_Hour.2C_and_Day_Files_Organisation
     #[inline]
-    pub fn osmosis_replication_sequence_number(&self) -> i64 {
-        let value = flatdata_read_bytes!(i64, self.data.as_ptr(), 392, 64);
+    pub fn replication_sequence_number(&self) -> i64 {
+        let value = flatdata_read_bytes!(i64, self.data.as_ptr(), 304, 64);
         unsafe { std::mem::transmute::<i64, i64>(value) }
     }
 
     /// Replication base URL (reference to `stringtable`).
     #[inline]
-    pub fn osmosis_replication_base_url_idx(&self) -> u64 {
-        let value = flatdata_read_bytes!(u64, self.data.as_ptr(), 456, 40);
+    pub fn replication_base_url_idx(&self) -> u64 {
+        let value = flatdata_read_bytes!(u64, self.data.as_ptr(), 368, 40);
         unsafe { std::mem::transmute::<u64, u64>(value) }
     }
 
@@ -189,19 +166,16 @@ impl Header {
 impl std::fmt::Debug for Header {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         f.debug_struct("Header")
+            .field("coord_scale", &self.coord_scale())
             .field("bbox_left", &self.bbox_left())
             .field("bbox_right", &self.bbox_right())
             .field("bbox_top", &self.bbox_top())
             .field("bbox_bottom", &self.bbox_bottom())
-            .field("required_feature_first_idx", &self.required_feature_first_idx())
-            .field("required_features_size", &self.required_features_size())
-            .field("optional_feature_first_idx", &self.optional_feature_first_idx())
-            .field("optional_features_size", &self.optional_features_size())
             .field("writingprogram_idx", &self.writingprogram_idx())
             .field("source_idx", &self.source_idx())
-            .field("osmosis_replication_timestamp", &self.osmosis_replication_timestamp())
-            .field("osmosis_replication_sequence_number", &self.osmosis_replication_sequence_number())
-            .field("osmosis_replication_base_url_idx", &self.osmosis_replication_base_url_idx())
+            .field("replication_timestamp", &self.replication_timestamp())
+            .field("replication_sequence_number", &self.replication_sequence_number())
+            .field("replication_base_url_idx", &self.replication_base_url_idx())
             .finish()
     }
 }
@@ -209,78 +183,58 @@ impl std::fmt::Debug for Header {
 impl std::cmp::PartialEq for Header {
     #[inline]
     fn eq(&self, other: &Self) -> bool {
-        self.bbox_left() == other.bbox_left() &&        self.bbox_right() == other.bbox_right() &&        self.bbox_top() == other.bbox_top() &&        self.bbox_bottom() == other.bbox_bottom() &&        self.required_feature_first_idx() == other.required_feature_first_idx() &&        self.required_features_size() == other.required_features_size() &&        self.optional_feature_first_idx() == other.optional_feature_first_idx() &&        self.optional_features_size() == other.optional_features_size() &&        self.writingprogram_idx() == other.writingprogram_idx() &&        self.source_idx() == other.source_idx() &&        self.osmosis_replication_timestamp() == other.osmosis_replication_timestamp() &&        self.osmosis_replication_sequence_number() == other.osmosis_replication_sequence_number() &&        self.osmosis_replication_base_url_idx() == other.osmosis_replication_base_url_idx()     }
+        self.coord_scale() == other.coord_scale() &&        self.bbox_left() == other.bbox_left() &&        self.bbox_right() == other.bbox_right() &&        self.bbox_top() == other.bbox_top() &&        self.bbox_bottom() == other.bbox_bottom() &&        self.writingprogram_idx() == other.writingprogram_idx() &&        self.source_idx() == other.source_idx() &&        self.replication_timestamp() == other.replication_timestamp() &&        self.replication_sequence_number() == other.replication_sequence_number() &&        self.replication_base_url_idx() == other.replication_base_url_idx()     }
 }
 
 impl Header {
-    /// Bounding box (min longitude scaled with `COORD_SCALE`)
+    /// All coordinates in this archive are scaled by this constant
+/// To get the original degree-based coordinate back compute (latitude/coord_scale,longitude/coord_scale)
     #[inline]
     #[allow(missing_docs)]
-    pub fn set_bbox_left(&mut self, value: i64) {
-        flatdata_write_bytes!(i64; value, self.data, 0, 40)
+    pub fn set_coord_scale(&mut self, value: i32) {
+        flatdata_write_bytes!(i32; value, self.data, 0, 32)
     }
 
-    /// Bounding box (max longitude scaled with `COORD_SCALE`)
+    /// Bounding box (min longitude scaled with `header.coord_scale`)
     #[inline]
     #[allow(missing_docs)]
-    pub fn set_bbox_right(&mut self, value: i64) {
-        flatdata_write_bytes!(i64; value, self.data, 40, 40)
+    pub fn set_bbox_left(&mut self, value: i32) {
+        flatdata_write_bytes!(i32; value, self.data, 32, 32)
     }
 
-    /// Bounding box (max latitude scaled with `COORD_SCALE`)
+    /// Bounding box (max longitude scaled with `header.coord_scale`)
     #[inline]
     #[allow(missing_docs)]
-    pub fn set_bbox_top(&mut self, value: i64) {
-        flatdata_write_bytes!(i64; value, self.data, 80, 40)
+    pub fn set_bbox_right(&mut self, value: i32) {
+        flatdata_write_bytes!(i32; value, self.data, 64, 32)
     }
 
-    /// Bounding box (min latitude scaled with `COORD_SCALE`)
+    /// Bounding box (max latitude scaled with `header.coord_scale`)
     #[inline]
     #[allow(missing_docs)]
-    pub fn set_bbox_bottom(&mut self, value: i64) {
-        flatdata_write_bytes!(i64; value, self.data, 120, 40)
+    pub fn set_bbox_top(&mut self, value: i32) {
+        flatdata_write_bytes!(i32; value, self.data, 96, 32)
     }
 
-    /// Reference to the first required feature in `stringtable`.
+    /// Bounding box (min latitude scaled with `header.coord_scale`)
     #[inline]
     #[allow(missing_docs)]
-    pub fn set_required_feature_first_idx(&mut self, value: u64) {
-        flatdata_write_bytes!(u64; value, self.data, 160, 40)
-    }
-
-    /// Number of required features.
-    #[inline]
-    #[allow(missing_docs)]
-    pub fn set_required_features_size(&mut self, value: u32) {
-        flatdata_write_bytes!(u32; value, self.data, 200, 4)
-    }
-
-    /// Reference to the first optional feature in `stringtable`.
-    #[inline]
-    #[allow(missing_docs)]
-    pub fn set_optional_feature_first_idx(&mut self, value: u64) {
-        flatdata_write_bytes!(u64; value, self.data, 204, 40)
-    }
-
-    /// Number of optional features.
-    #[inline]
-    #[allow(missing_docs)]
-    pub fn set_optional_features_size(&mut self, value: u32) {
-        flatdata_write_bytes!(u32; value, self.data, 244, 4)
+    pub fn set_bbox_bottom(&mut self, value: i32) {
+        flatdata_write_bytes!(i32; value, self.data, 128, 32)
     }
 
     /// Writing program used to write the data (reference to `stringtable`).
     #[inline]
     #[allow(missing_docs)]
     pub fn set_writingprogram_idx(&mut self, value: u64) {
-        flatdata_write_bytes!(u64; value, self.data, 248, 40)
+        flatdata_write_bytes!(u64; value, self.data, 160, 40)
     }
 
     /// The origin (source) of the data.
     #[inline]
     #[allow(missing_docs)]
     pub fn set_source_idx(&mut self, value: u64) {
-        flatdata_write_bytes!(u64; value, self.data, 288, 40)
+        flatdata_write_bytes!(u64; value, self.data, 200, 40)
     }
 
     /// Replication timestamp, expressed in seconds since the epoch.
@@ -289,8 +243,8 @@ impl Header {
 /// [`state.txt`]: https://wiki.openstreetmap.org/wiki/Planet.osm/diffs#Minute.2C_Hour.2C_and_Day_Files_Organisation
     #[inline]
     #[allow(missing_docs)]
-    pub fn set_osmosis_replication_timestamp(&mut self, value: i64) {
-        flatdata_write_bytes!(i64; value, self.data, 328, 64)
+    pub fn set_replication_timestamp(&mut self, value: i64) {
+        flatdata_write_bytes!(i64; value, self.data, 240, 64)
     }
 
     /// Replication sequence number (`sequenceNumber` from [`state.txt`]).
@@ -298,34 +252,31 @@ impl Header {
 /// [`state.txt`]: https://wiki.openstreetmap.org/wiki/Planet.osm/diffs#Minute.2C_Hour.2C_and_Day_Files_Organisation
     #[inline]
     #[allow(missing_docs)]
-    pub fn set_osmosis_replication_sequence_number(&mut self, value: i64) {
-        flatdata_write_bytes!(i64; value, self.data, 392, 64)
+    pub fn set_replication_sequence_number(&mut self, value: i64) {
+        flatdata_write_bytes!(i64; value, self.data, 304, 64)
     }
 
     /// Replication base URL (reference to `stringtable`).
     #[inline]
     #[allow(missing_docs)]
-    pub fn set_osmosis_replication_base_url_idx(&mut self, value: u64) {
-        flatdata_write_bytes!(u64; value, self.data, 456, 40)
+    pub fn set_replication_base_url_idx(&mut self, value: u64) {
+        flatdata_write_bytes!(u64; value, self.data, 368, 40)
     }
 
 
     /// Copies the data from `other` into this struct.
     #[inline]
     pub fn fill_from(&mut self, other: &Header) {
+        self.set_coord_scale(other.coord_scale());
         self.set_bbox_left(other.bbox_left());
         self.set_bbox_right(other.bbox_right());
         self.set_bbox_top(other.bbox_top());
         self.set_bbox_bottom(other.bbox_bottom());
-        self.set_required_feature_first_idx(other.required_feature_first_idx());
-        self.set_required_features_size(other.required_features_size());
-        self.set_optional_feature_first_idx(other.optional_feature_first_idx());
-        self.set_optional_features_size(other.optional_features_size());
         self.set_writingprogram_idx(other.writingprogram_idx());
         self.set_source_idx(other.source_idx());
-        self.set_osmosis_replication_timestamp(other.osmosis_replication_timestamp());
-        self.set_osmosis_replication_sequence_number(other.osmosis_replication_sequence_number());
-        self.set_osmosis_replication_base_url_idx(other.osmosis_replication_base_url_idx());
+        self.set_replication_timestamp(other.replication_timestamp());
+        self.set_replication_sequence_number(other.replication_sequence_number());
+        self.set_replication_base_url_idx(other.replication_base_url_idx());
     }
 }
 /// A `(key, value)` attached to a `Node`, `Way`, or `Relation.
@@ -467,47 +418,40 @@ impl Tag {
 /// See <https://wiki.openstreetmap.org/wiki/Node>.
 #[repr(transparent)]
 pub struct Node {
-    data: [u8; 20],
+    data: [u8; 13],
 }
 
 impl Node {
     /// Unsafe since the struct might not be self-contained
     pub unsafe fn new_unchecked( ) -> Self {
-        Self{data : [0; 20]}
+        Self{data : [0; 13]}
     }
 }
 
 impl flatdata::Struct for Node {
     unsafe fn create_unchecked( ) -> Self {
-        Self{data : [0; 20]}
+        Self{data : [0; 13]}
     }
 
-    const SIZE_IN_BYTES: usize = 20;
+    const SIZE_IN_BYTES: usize = 13;
     const IS_OVERLAPPING_WITH_NEXT : bool = true;
 }
 
 impl flatdata::Overlap for Node {}
 
 impl Node {
-    /// Unique node ID
+    /// Latitude (scaled with `header.coord_scale`).
     #[inline]
-    pub fn id(&self) -> i64 {
-        let value = flatdata_read_bytes!(i64, self.data.as_ptr(), 0, 40);
-        unsafe { std::mem::transmute::<i64, i64>(value) }
+    pub fn lat(&self) -> i32 {
+        let value = flatdata_read_bytes!(i32, self.data.as_ptr(), 0, 32);
+        unsafe { std::mem::transmute::<i32, i32>(value) }
     }
 
-    /// Latitude (scaled with `COORD_SCALE`).
+    /// Longitude (scaled with `header.coord_scale`).
     #[inline]
-    pub fn lat(&self) -> i64 {
-        let value = flatdata_read_bytes!(i64, self.data.as_ptr(), 40, 40);
-        unsafe { std::mem::transmute::<i64, i64>(value) }
-    }
-
-    /// Longitude (scaled with `COORD_SCALE`).
-    #[inline]
-    pub fn lon(&self) -> i64 {
-        let value = flatdata_read_bytes!(i64, self.data.as_ptr(), 80, 40);
-        unsafe { std::mem::transmute::<i64, i64>(value) }
+    pub fn lon(&self) -> i32 {
+        let value = flatdata_read_bytes!(i32, self.data.as_ptr(), 32, 32);
+        unsafe { std::mem::transmute::<i32, i32>(value) }
     }
 
     /// First element of the range [`tags`].
@@ -515,7 +459,7 @@ impl Node {
     /// [`tags`]: #method.tags
     #[inline]
     pub fn tag_first_idx(&self) -> u64 {
-        let value = flatdata_read_bytes!(u64, self.data.as_ptr(), 120, 40);
+        let value = flatdata_read_bytes!(u64, self.data.as_ptr(), 64, 40);
         unsafe { std::mem::transmute::<u64, u64>(value) }
     }
 
@@ -524,8 +468,8 @@ impl Node {
 /// The values of the range are indexes in the `tags_index` vector.
     #[inline]
     pub fn tags(&self) -> std::ops::Range<u64> {
-        let start = flatdata_read_bytes!(u64, self.data.as_ptr(), 120, 40);
-        let end = flatdata_read_bytes!(u64, self.data.as_ptr(), 120 + 20 * 8, 40);
+        let start = flatdata_read_bytes!(u64, self.data.as_ptr(), 64, 40);
+        let end = flatdata_read_bytes!(u64, self.data.as_ptr(), 64 + 13 * 8, 40);
         start..end
     }
 
@@ -534,7 +478,6 @@ impl Node {
 impl std::fmt::Debug for Node {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         f.debug_struct("Node")
-            .field("id", &self.id())
             .field("lat", &self.lat())
             .field("lon", &self.lon())
             .field("tag_first_idx", &self.tag_first_idx())
@@ -545,29 +488,22 @@ impl std::fmt::Debug for Node {
 impl std::cmp::PartialEq for Node {
     #[inline]
     fn eq(&self, other: &Self) -> bool {
-        self.id() == other.id() &&        self.lat() == other.lat() &&        self.lon() == other.lon() &&        self.tag_first_idx() == other.tag_first_idx()     }
+        self.lat() == other.lat() &&        self.lon() == other.lon() &&        self.tag_first_idx() == other.tag_first_idx()     }
 }
 
 impl Node {
-    /// Unique node ID
+    /// Latitude (scaled with `header.coord_scale`).
     #[inline]
     #[allow(missing_docs)]
-    pub fn set_id(&mut self, value: i64) {
-        flatdata_write_bytes!(i64; value, self.data, 0, 40)
+    pub fn set_lat(&mut self, value: i32) {
+        flatdata_write_bytes!(i32; value, self.data, 0, 32)
     }
 
-    /// Latitude (scaled with `COORD_SCALE`).
+    /// Longitude (scaled with `header.coord_scale`).
     #[inline]
     #[allow(missing_docs)]
-    pub fn set_lat(&mut self, value: i64) {
-        flatdata_write_bytes!(i64; value, self.data, 40, 40)
-    }
-
-    /// Longitude (scaled with `COORD_SCALE`).
-    #[inline]
-    #[allow(missing_docs)]
-    pub fn set_lon(&mut self, value: i64) {
-        flatdata_write_bytes!(i64; value, self.data, 80, 40)
+    pub fn set_lon(&mut self, value: i32) {
+        flatdata_write_bytes!(i32; value, self.data, 32, 32)
     }
 
     /// First element of the range [`tags`].
@@ -576,14 +512,13 @@ impl Node {
     #[inline]
     #[allow(missing_docs)]
     pub fn set_tag_first_idx(&mut self, value: u64) {
-        flatdata_write_bytes!(u64; value, self.data, 120, 40)
+        flatdata_write_bytes!(u64; value, self.data, 64, 40)
     }
 
 
     /// Copies the data from `other` into this struct.
     #[inline]
     pub fn fill_from(&mut self, other: &Node) {
-        self.set_id(other.id());
         self.set_lat(other.lat());
         self.set_lon(other.lon());
         self.set_tag_first_idx(other.tag_first_idx());
@@ -711,41 +646,34 @@ let value = value.unwrap_or(super::osm::INVALID_IDX);        flatdata_write_byte
 /// See <https://wiki.openstreetmap.org/wiki/Way>.
 #[repr(transparent)]
 pub struct Way {
-    data: [u8; 15],
+    data: [u8; 10],
 }
 
 impl Way {
     /// Unsafe since the struct might not be self-contained
     pub unsafe fn new_unchecked( ) -> Self {
-        Self{data : [0; 15]}
+        Self{data : [0; 10]}
     }
 }
 
 impl flatdata::Struct for Way {
     unsafe fn create_unchecked( ) -> Self {
-        Self{data : [0; 15]}
+        Self{data : [0; 10]}
     }
 
-    const SIZE_IN_BYTES: usize = 15;
+    const SIZE_IN_BYTES: usize = 10;
     const IS_OVERLAPPING_WITH_NEXT : bool = true;
 }
 
 impl flatdata::Overlap for Way {}
 
 impl Way {
-    /// Unique ID of the way.
-    #[inline]
-    pub fn id(&self) -> i64 {
-        let value = flatdata_read_bytes!(i64, self.data.as_ptr(), 0, 40);
-        unsafe { std::mem::transmute::<i64, i64>(value) }
-    }
-
     /// First element of the range [`tags`].
     ///
     /// [`tags`]: #method.tags
     #[inline]
     pub fn tag_first_idx(&self) -> u64 {
-        let value = flatdata_read_bytes!(u64, self.data.as_ptr(), 40, 40);
+        let value = flatdata_read_bytes!(u64, self.data.as_ptr(), 0, 40);
         unsafe { std::mem::transmute::<u64, u64>(value) }
     }
 
@@ -754,8 +682,8 @@ impl Way {
 /// The values of the range are indexes in the `tags_index` vector.
     #[inline]
     pub fn tags(&self) -> std::ops::Range<u64> {
-        let start = flatdata_read_bytes!(u64, self.data.as_ptr(), 40, 40);
-        let end = flatdata_read_bytes!(u64, self.data.as_ptr(), 40 + 15 * 8, 40);
+        let start = flatdata_read_bytes!(u64, self.data.as_ptr(), 0, 40);
+        let end = flatdata_read_bytes!(u64, self.data.as_ptr(), 0 + 10 * 8, 40);
         start..end
     }
 
@@ -764,7 +692,7 @@ impl Way {
     /// [`refs`]: #method.refs
     #[inline]
     pub fn ref_first_idx(&self) -> u64 {
-        let value = flatdata_read_bytes!(u64, self.data.as_ptr(), 80, 40);
+        let value = flatdata_read_bytes!(u64, self.data.as_ptr(), 40, 40);
         unsafe { std::mem::transmute::<u64, u64>(value) }
     }
 
@@ -773,8 +701,8 @@ impl Way {
 /// The values of the range are indexes in the `nodes_index` vector.
     #[inline]
     pub fn refs(&self) -> std::ops::Range<u64> {
-        let start = flatdata_read_bytes!(u64, self.data.as_ptr(), 80, 40);
-        let end = flatdata_read_bytes!(u64, self.data.as_ptr(), 80 + 15 * 8, 40);
+        let start = flatdata_read_bytes!(u64, self.data.as_ptr(), 40, 40);
+        let end = flatdata_read_bytes!(u64, self.data.as_ptr(), 40 + 10 * 8, 40);
         start..end
     }
 
@@ -783,7 +711,6 @@ impl Way {
 impl std::fmt::Debug for Way {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         f.debug_struct("Way")
-            .field("id", &self.id())
             .field("tag_first_idx", &self.tag_first_idx())
             .field("ref_first_idx", &self.ref_first_idx())
             .finish()
@@ -793,24 +720,17 @@ impl std::fmt::Debug for Way {
 impl std::cmp::PartialEq for Way {
     #[inline]
     fn eq(&self, other: &Self) -> bool {
-        self.id() == other.id() &&        self.tag_first_idx() == other.tag_first_idx() &&        self.ref_first_idx() == other.ref_first_idx()     }
+        self.tag_first_idx() == other.tag_first_idx() &&        self.ref_first_idx() == other.ref_first_idx()     }
 }
 
 impl Way {
-    /// Unique ID of the way.
-    #[inline]
-    #[allow(missing_docs)]
-    pub fn set_id(&mut self, value: i64) {
-        flatdata_write_bytes!(i64; value, self.data, 0, 40)
-    }
-
     /// First element of the range [`tags`].
     ///
     /// [`tags`]: struct.WayRef.html#method.tags
     #[inline]
     #[allow(missing_docs)]
     pub fn set_tag_first_idx(&mut self, value: u64) {
-        flatdata_write_bytes!(u64; value, self.data, 40, 40)
+        flatdata_write_bytes!(u64; value, self.data, 0, 40)
     }
 
     /// First element of the range [`refs`].
@@ -819,14 +739,13 @@ impl Way {
     #[inline]
     #[allow(missing_docs)]
     pub fn set_ref_first_idx(&mut self, value: u64) {
-        flatdata_write_bytes!(u64; value, self.data, 80, 40)
+        flatdata_write_bytes!(u64; value, self.data, 40, 40)
     }
 
 
     /// Copies the data from `other` into this struct.
     #[inline]
     pub fn fill_from(&mut self, other: &Way) {
-        self.set_id(other.id());
         self.set_tag_first_idx(other.tag_first_idx());
         self.set_ref_first_idx(other.ref_first_idx());
     }
@@ -1363,41 +1282,34 @@ let value = value.unwrap_or(super::osm::INVALID_IDX);        flatdata_write_byte
 /// See <https://wiki.openstreetmap.org/wiki/Relation>.
 #[repr(transparent)]
 pub struct Relation {
-    data: [u8; 10],
+    data: [u8; 5],
 }
 
 impl Relation {
     /// Unsafe since the struct might not be self-contained
     pub unsafe fn new_unchecked( ) -> Self {
-        Self{data : [0; 10]}
+        Self{data : [0; 5]}
     }
 }
 
 impl flatdata::Struct for Relation {
     unsafe fn create_unchecked( ) -> Self {
-        Self{data : [0; 10]}
+        Self{data : [0; 5]}
     }
 
-    const SIZE_IN_BYTES: usize = 10;
+    const SIZE_IN_BYTES: usize = 5;
     const IS_OVERLAPPING_WITH_NEXT : bool = true;
 }
 
 impl flatdata::Overlap for Relation {}
 
 impl Relation {
-    /// Unique ID of the relation.
-    #[inline]
-    pub fn id(&self) -> i64 {
-        let value = flatdata_read_bytes!(i64, self.data.as_ptr(), 0, 40);
-        unsafe { std::mem::transmute::<i64, i64>(value) }
-    }
-
     /// First element of the range [`tags`].
     ///
     /// [`tags`]: #method.tags
     #[inline]
     pub fn tag_first_idx(&self) -> u64 {
-        let value = flatdata_read_bytes!(u64, self.data.as_ptr(), 40, 40);
+        let value = flatdata_read_bytes!(u64, self.data.as_ptr(), 0, 40);
         unsafe { std::mem::transmute::<u64, u64>(value) }
     }
 
@@ -1406,8 +1318,8 @@ impl Relation {
 /// The values of the range are indexes in the `tags` vector.
     #[inline]
     pub fn tags(&self) -> std::ops::Range<u64> {
-        let start = flatdata_read_bytes!(u64, self.data.as_ptr(), 40, 40);
-        let end = flatdata_read_bytes!(u64, self.data.as_ptr(), 40 + 10 * 8, 40);
+        let start = flatdata_read_bytes!(u64, self.data.as_ptr(), 0, 40);
+        let end = flatdata_read_bytes!(u64, self.data.as_ptr(), 0 + 5 * 8, 40);
         start..end
     }
 
@@ -1416,7 +1328,6 @@ impl Relation {
 impl std::fmt::Debug for Relation {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         f.debug_struct("Relation")
-            .field("id", &self.id())
             .field("tag_first_idx", &self.tag_first_idx())
             .finish()
     }
@@ -1425,34 +1336,317 @@ impl std::fmt::Debug for Relation {
 impl std::cmp::PartialEq for Relation {
     #[inline]
     fn eq(&self, other: &Self) -> bool {
-        self.id() == other.id() &&        self.tag_first_idx() == other.tag_first_idx()     }
+        self.tag_first_idx() == other.tag_first_idx()     }
 }
 
 impl Relation {
-    /// Unique ID of the relation.
-    #[inline]
-    #[allow(missing_docs)]
-    pub fn set_id(&mut self, value: i64) {
-        flatdata_write_bytes!(i64; value, self.data, 0, 40)
-    }
-
     /// First element of the range [`tags`].
     ///
     /// [`tags`]: struct.RelationRef.html#method.tags
     #[inline]
     #[allow(missing_docs)]
     pub fn set_tag_first_idx(&mut self, value: u64) {
-        flatdata_write_bytes!(u64; value, self.data, 40, 40)
+        flatdata_write_bytes!(u64; value, self.data, 0, 40)
     }
 
 
     /// Copies the data from `other` into this struct.
     #[inline]
     pub fn fill_from(&mut self, other: &Relation) {
-        self.set_id(other.id());
         self.set_tag_first_idx(other.tag_first_idx());
     }
 }
+#[repr(transparent)]
+#[derive(Clone)]
+pub struct Id {
+    data: [u8; 5],
+}
+
+impl Id {
+    /// Unsafe since the struct might not be self-contained
+    pub unsafe fn new_unchecked( ) -> Self {
+        Self{data : [0; 5]}
+    }
+}
+
+impl flatdata::Struct for Id {
+    unsafe fn create_unchecked( ) -> Self {
+        Self{data : [0; 5]}
+    }
+
+    const SIZE_IN_BYTES: usize = 5;
+    const IS_OVERLAPPING_WITH_NEXT : bool = false;
+}
+
+impl Id {
+    pub fn new( ) -> Self {
+        Self{data : [0; 5]}
+    }
+
+    /// Create reference from byte array of matching size
+    pub fn from_bytes(data: &[u8; 5]) -> &Self {
+        // Safety: This is safe since Id is repr(transparent)
+        unsafe{ std::mem::transmute( data ) }
+    }
+
+    /// Create reference from byte array of matching size
+    pub fn from_bytes_mut(data: &mut [u8; 5]) -> &mut Self {
+        // Safety: This is safe since Id is repr(transparent)
+        unsafe{ std::mem::transmute( data ) }
+    }
+
+    /// Create reference from byte array
+    pub fn from_bytes_slice(data: &[u8]) -> Result<&Self, flatdata::ResourceStorageError> {
+        // We cannot rely on TryFrom here, since it does not yet support > 33 bytes
+        if data.len() < 5 {
+            assert_eq!(data.len(), 5);
+            return Err(flatdata::ResourceStorageError::UnexpectedDataSize);
+        }
+        let ptr = data.as_ptr() as *const [u8; 5];
+        // Safety: We checked length before
+        Ok(Self::from_bytes(unsafe { &*ptr }))
+    }
+
+    /// Create reference from byte array
+    pub fn from_bytes_slice_mut(data: &mut [u8]) -> Result<&mut Self, flatdata::ResourceStorageError> {
+        // We cannot rely on TryFrom here, since it does not yet support > 33 bytes
+        if data.len() < 5 {
+            assert_eq!(data.len(), 5);
+            return Err(flatdata::ResourceStorageError::UnexpectedDataSize);
+        }
+        let ptr = data.as_ptr() as *mut [u8; 5];
+        // Safety: We checked length before
+        Ok(Self::from_bytes_mut(unsafe { &mut *ptr }))
+    }
+
+    pub fn as_bytes(&self) -> &[u8; 5] {
+        &self.data
+    }
+}
+
+impl Default for Id {
+    fn default( ) -> Self {
+        Self::new( )
+    }
+}
+
+unsafe impl flatdata::NoOverlap for Id {}
+
+impl Id {
+    #[inline]
+    pub fn value(&self) -> u64 {
+        let value = flatdata_read_bytes!(u64, self.data.as_ptr(), 0, 40);
+        unsafe { std::mem::transmute::<u64, u64>(value) }
+    }
+
+}
+
+impl std::fmt::Debug for Id {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        f.debug_struct("Id")
+            .field("value", &self.value())
+            .finish()
+    }
+}
+
+impl std::cmp::PartialEq for Id {
+    #[inline]
+    fn eq(&self, other: &Self) -> bool {
+        self.value() == other.value()     }
+}
+
+impl Id {
+    #[inline]
+    #[allow(missing_docs)]
+    pub fn set_value(&mut self, value: u64) {
+        flatdata_write_bytes!(u64; value, self.data, 0, 40)
+    }
+
+
+    /// Copies the data from `other` into this struct.
+    #[inline]
+    pub fn fill_from(&mut self, other: &Id) {
+        self.set_value(other.value());
+    }
+}
+
+
+
+/// An optional sub-archive storing the original OSM ids of nodes, ways, and relations
+#[derive(Clone)]
+pub struct Ids {
+    _storage: flatdata::StorageHandle,
+    nodes : &'static [super::osm::Id],
+    ways : &'static [super::osm::Id],
+    relations : &'static [super::osm::Id],
+}
+
+impl Ids {
+    fn signature_name(archive_name: &str) -> String {
+        format!("{}.archive", archive_name)
+    }
+
+    /// List of OSM ids of all nodes in the parent archive
+/// nodes[i] has its id stored in ids.nodes[i]
+    #[inline]
+    pub fn nodes(&self) -> &[super::osm::Id] {
+        self.nodes
+    }
+
+    /// List of OSM ids of all ways in the parent archive
+/// ways[i] has its id stored in ids.ways[i]
+    #[inline]
+    pub fn ways(&self) -> &[super::osm::Id] {
+        self.ways
+    }
+
+    /// List of OSM ids of all relations in the parent archive
+/// relations[i] has its id stored in ids.relations[i]
+    #[inline]
+    pub fn relations(&self) -> &[super::osm::Id] {
+        self.relations
+    }
+
+}
+
+impl ::std::fmt::Debug for Ids {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+        f.debug_struct("Ids")
+            .field("nodes", &self.nodes())
+            .field("ways", &self.ways())
+            .field("relations", &self.relations())
+            .finish()
+    }
+}
+
+impl Ids {
+    pub fn open(storage: flatdata::StorageHandle)
+        -> ::std::result::Result<Self, flatdata::ResourceStorageError>
+    {
+        #[allow(unused_imports)]
+        use flatdata::SliceExt;
+        #[allow(unused_variables)]
+        use flatdata::ResourceStorageError as Error;
+        // extend lifetime since Rust cannot know that we reference a cache here
+        #[allow(unused_variables)]
+        let extend = |x : Result<&[u8], Error>| -> Result<&'static [u8], Error> {x.map(|x| unsafe{std::mem::transmute(x)})};
+
+        storage.read(&Self::signature_name("Ids"), schema::ids::IDS)?;
+
+        let nodes = {
+            use flatdata::check_resource as check;
+            let max_size = None;
+            let resource = extend(storage.read("nodes", schema::ids::resources::NODES));
+            check("nodes", |r| r.len(), max_size, resource.and_then(|x| <&[super::osm::Id]>::from_bytes(x)))?
+        };
+        let ways = {
+            use flatdata::check_resource as check;
+            let max_size = None;
+            let resource = extend(storage.read("ways", schema::ids::resources::WAYS));
+            check("ways", |r| r.len(), max_size, resource.and_then(|x| <&[super::osm::Id]>::from_bytes(x)))?
+        };
+        let relations = {
+            use flatdata::check_resource as check;
+            let max_size = None;
+            let resource = extend(storage.read("relations", schema::ids::resources::RELATIONS));
+            check("relations", |r| r.len(), max_size, resource.and_then(|x| <&[super::osm::Id]>::from_bytes(x)))?
+        };
+
+        Ok(Self {
+            _storage: storage,
+            nodes,
+            ways,
+            relations,
+        })
+    }
+}
+
+/// Builder for creating [`Ids`] archives.
+///
+///[`Ids`]: struct.Ids.html
+#[derive(Clone, Debug)]
+pub struct IdsBuilder {
+    storage: flatdata::StorageHandle
+}
+
+impl IdsBuilder {
+    #[inline]
+    /// Stores [`nodes`] in the archive.
+    ///
+    /// [`nodes`]: struct.Ids.html#method.nodes
+    pub fn set_nodes(&self, vector: &[super::osm::Id]) -> ::std::io::Result<()> {
+        use flatdata::SliceExt;
+        self.storage.write("nodes", schema::ids::resources::NODES, vector.as_bytes())
+    }
+
+    /// Opens [`nodes`] in the archive for buffered writing.
+    ///
+    /// Elements can be added to the vector until the [`ExternalVector::close`] method
+    /// is called. To flush the data fully into the archive, this method must be called
+    /// in the end.
+    ///
+    /// [`nodes`]: struct.Ids.html#method.nodes
+    /// [`ExternalVector::close`]: flatdata/struct.ExternalVector.html#method.close
+    #[inline]
+    pub fn start_nodes(&self) -> ::std::io::Result<flatdata::ExternalVector<super::osm::Id>> {
+        flatdata::create_external_vector(&*self.storage, "nodes", schema::ids::resources::NODES)
+    }
+
+    #[inline]
+    /// Stores [`ways`] in the archive.
+    ///
+    /// [`ways`]: struct.Ids.html#method.ways
+    pub fn set_ways(&self, vector: &[super::osm::Id]) -> ::std::io::Result<()> {
+        use flatdata::SliceExt;
+        self.storage.write("ways", schema::ids::resources::WAYS, vector.as_bytes())
+    }
+
+    /// Opens [`ways`] in the archive for buffered writing.
+    ///
+    /// Elements can be added to the vector until the [`ExternalVector::close`] method
+    /// is called. To flush the data fully into the archive, this method must be called
+    /// in the end.
+    ///
+    /// [`ways`]: struct.Ids.html#method.ways
+    /// [`ExternalVector::close`]: flatdata/struct.ExternalVector.html#method.close
+    #[inline]
+    pub fn start_ways(&self) -> ::std::io::Result<flatdata::ExternalVector<super::osm::Id>> {
+        flatdata::create_external_vector(&*self.storage, "ways", schema::ids::resources::WAYS)
+    }
+
+    #[inline]
+    /// Stores [`relations`] in the archive.
+    ///
+    /// [`relations`]: struct.Ids.html#method.relations
+    pub fn set_relations(&self, vector: &[super::osm::Id]) -> ::std::io::Result<()> {
+        use flatdata::SliceExt;
+        self.storage.write("relations", schema::ids::resources::RELATIONS, vector.as_bytes())
+    }
+
+    /// Opens [`relations`] in the archive for buffered writing.
+    ///
+    /// Elements can be added to the vector until the [`ExternalVector::close`] method
+    /// is called. To flush the data fully into the archive, this method must be called
+    /// in the end.
+    ///
+    /// [`relations`]: struct.Ids.html#method.relations
+    /// [`ExternalVector::close`]: flatdata/struct.ExternalVector.html#method.close
+    #[inline]
+    pub fn start_relations(&self) -> ::std::io::Result<flatdata::ExternalVector<super::osm::Id>> {
+        flatdata::create_external_vector(&*self.storage, "relations", schema::ids::resources::RELATIONS)
+    }
+
+}
+
+impl IdsBuilder {
+    pub fn new(
+        storage: flatdata::StorageHandle,
+    ) -> Result<Self, flatdata::ResourceStorageError> {
+        flatdata::create_archive("Ids", schema::ids::IDS, &storage)?;
+        Ok(Self { storage })
+    }
+}
+
 
 
 /// Enum for read-only heterogeneous access to elements in a
@@ -1619,6 +1813,8 @@ pub struct Osm {
     tags_index : &'static [super::osm::TagIndex],
     nodes_index : &'static [super::osm::NodeIndex],
     stringtable : flatdata::RawData<'static>,
+    ids : Option<super::osm::Ids
+>,
 }
 
 impl Osm {
@@ -1703,6 +1899,11 @@ impl Osm {
         self.stringtable
     }
 
+    #[inline]
+    pub fn ids(&self) -> Option<&super::osm::Ids> {
+        self.ids.as_ref()
+    }
+
 }
 
 impl ::std::fmt::Debug for Osm {
@@ -1717,6 +1918,7 @@ impl ::std::fmt::Debug for Osm {
             .field("tags_index", &self.tags_index())
             .field("nodes_index", &self.nodes_index())
             .field("stringtable", &self.stringtable())
+            .field("ids", &self.ids())
             .finish()
     }
 }
@@ -1805,6 +2007,11 @@ impl Osm {
             let resource = extend(storage.read("stringtable", schema::osm::resources::STRINGTABLE));
             check("stringtable", |r| r.len(), max_size, resource.map(|x| flatdata::RawData::new(x)))?
         };
+        let ids = {
+            use flatdata::check_optional_resource as check;
+            let max_size = None;
+            check("ids", |_| 0, max_size, super::osm::Ids::open(storage.subdir("ids")))?
+        };
 
         Ok(Self {
             _storage: storage,
@@ -1817,6 +2024,7 @@ impl Osm {
             tags_index,
             nodes_index,
             stringtable,
+            ids,
         })
     }
 }
@@ -1993,6 +2201,15 @@ impl OsmBuilder {
         self.storage.write("stringtable", schema::osm::resources::STRINGTABLE, data)
     }
 
+    /// Stores [`ids`] in the archive.
+    ///
+    /// [`ids`]: struct.Osm.html#method.ids
+    #[inline]
+    pub fn ids(&self) -> Result<super::osm::IdsBuilder, flatdata::ResourceStorageError> {
+        let storage = self.storage.subdir("ids");
+        super::osm::IdsBuilder::new(storage)
+    }
+
 }
 
 impl OsmBuilder {
@@ -2007,33 +2224,97 @@ impl OsmBuilder {
 
 #[doc(hidden)]
 pub mod schema {
+pub mod ids {
+
+pub const IDS: &str = r#"namespace osm {
+struct Id
+{
+    value : u64 : 40;
+}
+}
+
+namespace osm {
+archive Ids
+{
+    nodes : vector< .osm.Id >;
+    ways : vector< .osm.Id >;
+    relations : vector< .osm.Id >;
+}
+}
+
+"#;
+
+pub mod resources {
+pub const NODES: &str = r#"namespace osm {
+struct Id
+{
+    value : u64 : 40;
+}
+}
+
+namespace osm {
+archive Ids
+{
+    nodes : vector< .osm.Id >;
+}
+}
+
+"#;
+pub const WAYS: &str = r#"namespace osm {
+struct Id
+{
+    value : u64 : 40;
+}
+}
+
+namespace osm {
+archive Ids
+{
+    ways : vector< .osm.Id >;
+}
+}
+
+"#;
+pub const RELATIONS: &str = r#"namespace osm {
+struct Id
+{
+    value : u64 : 40;
+}
+}
+
+namespace osm {
+archive Ids
+{
+    relations : vector< .osm.Id >;
+}
+}
+
+"#;
+}
+}
 pub mod osm {
 
 pub const OSM: &str = r#"namespace osm {
 struct Header
 {
-    bbox_left : i64 : 40;
-    bbox_right : i64 : 40;
-    bbox_top : i64 : 40;
-    bbox_bottom : i64 : 40;
-    required_feature_first_idx : u64 : 40;
-    required_features_size : u32 : 4;
-    optional_feature_first_idx : u64 : 40;
-    optional_features_size : u32 : 4;
+    coord_scale : i32 : 32;
+    bbox_left : i32 : 32;
+    bbox_right : i32 : 32;
+    bbox_top : i32 : 32;
+    bbox_bottom : i32 : 32;
     writingprogram_idx : u64 : 40;
     source_idx : u64 : 40;
-    osmosis_replication_timestamp : i64 : 64;
-    osmosis_replication_sequence_number : i64 : 64;
-    osmosis_replication_base_url_idx : u64 : 40;
+    replication_timestamp : i64 : 64;
+    replication_sequence_number : i64 : 64;
+    replication_base_url_idx : u64 : 40;
 }
 }
 
 namespace osm {
 struct Node
 {
-    id : i64 : 40;
-    lat : i64 : 40;
-    lon : i64 : 40;
+    lat : i32 : 32;
+    lon : i32 : 32;
     @range( tags )
     tag_first_idx : u64 : 40;
 }
@@ -2042,7 +2323,6 @@ struct Node
 namespace osm {
 struct Way
 {
-    id : i64 : 40;
     @range( tags )
     tag_first_idx : u64 : 40;
     @range( refs )
@@ -2053,7 +2333,6 @@ struct Way
 namespace osm {
 struct Relation
 {
-    id : i64 : 40;
     @range( tags )
     tag_first_idx : u64 : 40;
 }
@@ -2114,18 +2393,28 @@ struct NodeIndex
 }
 
 namespace osm {
-const u64 COORD_SCALE = 1000000000;
+struct Id
+{
+    value : u64 : 40;
+}
+}
+
+namespace osm {
+archive Ids
+{
+    nodes : vector< .osm.Id >;
+    ways : vector< .osm.Id >;
+    relations : vector< .osm.Id >;
+}
 }
 
 namespace osm {
 @bound_implicitly( Relations : .osm.Osm.relations, .osm.Osm.relation_members )
 archive Osm
 {
-    @explicit_reference( .osm.Header.required_feature_first_idx, .osm.Osm.stringtable )
-    @explicit_reference( .osm.Header.optional_feature_first_idx, .osm.Osm.stringtable )
     @explicit_reference( .osm.Header.writingprogram_idx, .osm.Osm.stringtable )
     @explicit_reference( .osm.Header.source_idx, .osm.Osm.stringtable )
-    @explicit_reference( .osm.Header.osmosis_replication_base_url_idx, .osm.Osm.stringtable )
+    @explicit_reference( .osm.Header.replication_base_url_idx, .osm.Osm.stringtable )
     header : .osm.Header;
     @explicit_reference( .osm.Node.tag_first_idx, .osm.Osm.tags_index )
     nodes : vector< .osm.Node >;
@@ -2149,6 +2438,8 @@ archive Osm
     @explicit_reference( .osm.NodeIndex.value, .osm.Osm.nodes )
     nodes_index : vector< .osm.NodeIndex >;
     stringtable : raw_data;
+    @optional
+    ids : archive .osm.Ids;
 }
 }
 
@@ -2158,30 +2449,25 @@ pub mod resources {
 pub const HEADER: &str = r#"namespace osm {
 struct Header
 {
-    bbox_left : i64 : 40;
-    bbox_right : i64 : 40;
-    bbox_top : i64 : 40;
-    bbox_bottom : i64 : 40;
-    required_feature_first_idx : u64 : 40;
-    required_features_size : u32 : 4;
-    optional_feature_first_idx : u64 : 40;
-    optional_features_size : u32 : 4;
+    coord_scale : i32 : 32;
+    bbox_left : i32 : 32;
+    bbox_right : i32 : 32;
+    bbox_top : i32 : 32;
+    bbox_bottom : i32 : 32;
     writingprogram_idx : u64 : 40;
     source_idx : u64 : 40;
-    osmosis_replication_timestamp : i64 : 64;
-    osmosis_replication_sequence_number : i64 : 64;
-    osmosis_replication_base_url_idx : u64 : 40;
+    replication_timestamp : i64 : 64;
+    replication_sequence_number : i64 : 64;
+    replication_base_url_idx : u64 : 40;
 }
 }
 
 namespace osm {
 archive Osm
 {
-    @explicit_reference( .osm.Header.required_feature_first_idx, .osm.Osm.stringtable )
-    @explicit_reference( .osm.Header.optional_feature_first_idx, .osm.Osm.stringtable )
     @explicit_reference( .osm.Header.writingprogram_idx, .osm.Osm.stringtable )
     @explicit_reference( .osm.Header.source_idx, .osm.Osm.stringtable )
-    @explicit_reference( .osm.Header.osmosis_replication_base_url_idx, .osm.Osm.stringtable )
+    @explicit_reference( .osm.Header.replication_base_url_idx, .osm.Osm.stringtable )
     header : .osm.Header;
 }
 }
@@ -2190,9 +2476,8 @@ archive Osm
 pub const NODES: &str = r#"namespace osm {
 struct Node
 {
-    id : i64 : 40;
-    lat : i64 : 40;
-    lon : i64 : 40;
+    lat : i32 : 32;
+    lon : i32 : 32;
     @range( tags )
     tag_first_idx : u64 : 40;
 }
@@ -2210,7 +2495,6 @@ archive Osm
 pub const WAYS: &str = r#"namespace osm {
 struct Way
 {
-    id : i64 : 40;
     @range( tags )
     tag_first_idx : u64 : 40;
     @range( refs )
@@ -2231,7 +2515,6 @@ archive Osm
 pub const RELATIONS: &str = r#"namespace osm {
 struct Relation
 {
-    id : i64 : 40;
     @range( tags )
     tag_first_idx : u64 : 40;
 }
@@ -2350,6 +2633,31 @@ pub const STRINGTABLE: &str = r#"namespace osm {
 archive Osm
 {
     stringtable : raw_data;
+}
+}
+
+"#;
+pub const IDS: &str = r#"namespace osm {
+struct Id
+{
+    value : u64 : 40;
+}
+}
+
+namespace osm {
+archive Ids
+{
+    nodes : vector< .osm.Id >;
+    ways : vector< .osm.Id >;
+    relations : vector< .osm.Id >;
+}
+}
+
+namespace osm {
+archive Osm
+{
+    @optional
+    ids : archive .osm.Ids;
 }
 }
 

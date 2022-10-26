@@ -1,6 +1,6 @@
 [package]
 name = "osmflatc"
-version = "0.1.0"
+version = "0.2.0"
 authors = [
     "boxdot <d@zerovolt.org>",
     "Christian Vetter <veaac.fdirct@gmail.com>",
@@ -26,7 +26,7 @@ flate2 = "1.0.18"
 itertools = "0.10.3"
 log = "0.4.11"
 memmap2 = "0.5.7"
-osmflat = "0.1.0"
+osmflat = "0.2.0"
 parking_lot = "0.11.0"
 pbr = "1.0.3"
 prost = "0.11.0"

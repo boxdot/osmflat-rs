@@ -27,49 +27,37 @@ type Error = Box<dyn std::error::Error>;
 
 fn serialize_header(
     header_block: &osmpbf::HeaderBlock,
+    coord_scale: i32,
     builder: &osmflat::OsmBuilder,
     stringtable: &mut StringTable,
 ) -> io::Result<()> {
     let mut header = osmflat::Header::new();
 
+    header.set_coord_scale(coord_scale);
+
     if let Some(ref bbox) = header_block.bbox {
-        header.set_bbox_left(bbox.left);
-        header.set_bbox_right(bbox.right);
-        header.set_bbox_top(bbox.top);
-        header.set_bbox_bottom(bbox.bottom);
+        header.set_bbox_left((bbox.left / (1000000000 / coord_scale) as i64) as i32);
+        header.set_bbox_right((bbox.right / (1000000000 / coord_scale) as i64) as i32);
+        header.set_bbox_top((bbox.top / (1000000000 / coord_scale) as i64) as i32);
+        header.set_bbox_bottom((bbox.bottom / (1000000000 / coord_scale) as i64) as i32);
     };
 
-    header.set_required_feature_first_idx(stringtable.next_index());
-    header.set_required_features_size(header_block.required_features.len() as u32);
-    for feature in &header_block.required_features {
-        stringtable.insert(feature);
-    }
-
-    header.set_optional_feature_first_idx(stringtable.next_index());
-    header.set_optional_features_size(header_block.optional_features.len() as u32);
-    for feature in &header_block.optional_features {
-        stringtable.insert(feature);
-    }
-
-    if let Some(ref writingprogram) = header_block.writingprogram {
-        // TODO: Should we also add our name here?
-        header.set_writingprogram_idx(stringtable.insert(writingprogram));
-    }
+    header.set_writingprogram_idx(stringtable.insert("osmflatc"));
 
     if let Some(ref source) = header_block.source {
         header.set_source_idx(stringtable.insert(source));
     }
 
     if let Some(timestamp) = header_block.osmosis_replication_timestamp {
-        header.set_osmosis_replication_timestamp(timestamp);
+        header.set_replication_timestamp(timestamp);
     }
 
     if let Some(number) = header_block.osmosis_replication_sequence_number {
-        header.set_osmosis_replication_sequence_number(number);
+        header.set_replication_sequence_number(number);
     }
 
     if let Some(ref url) = header_block.osmosis_replication_base_url {
-        header.set_osmosis_replication_base_url_idx(stringtable.insert(url));
+        header.set_replication_base_url_idx(stringtable.insert(url));
     }
 
     builder.set_header(&header)?;
@@ -178,7 +166,9 @@ fn add_string_table(
 
 fn serialize_dense_nodes(
     block: &osmpbf::PrimitiveBlock,
+    granularity: i32,
     nodes: &mut flatdata::ExternalVector<osmflat::Node>,
+    node_ids: &mut Option<flatdata::ExternalVector<osmflat::Id>>,
     nodes_id_to_idx: &mut ids::IdTableBuilder,
     stringtable: &mut StringTable,
     tags: &mut TagSerializer,
@@ -188,7 +178,7 @@ fn serialize_dense_nodes(
     for group in block.primitivegroup.iter() {
         let dense_nodes = group.dense.as_ref().unwrap();
 
-        let granularity = block.granularity.unwrap_or(100);
+        let pbf_granularity = block.granularity.unwrap_or(100);
         let lat_offset = block.lat_offset.unwrap_or(0);
         let lon_offset = block.lon_offset.unwrap_or(0);
         let mut lat = 0;
@@ -204,12 +194,18 @@ fn serialize_dense_nodes(
             assert_eq!(index as usize, nodes.len());
 
             let node = nodes.grow()?;
-            node.set_id(id);
+            if let Some(ids) = node_ids {
+                ids.grow()?.set_value(id as u64);
+            }
 
             lat += dense_nodes.lat[i];
             lon += dense_nodes.lon[i];
-            node.set_lat(lat_offset + (i64::from(granularity) * lat));
-            node.set_lon(lon_offset + (i64::from(granularity) * lon));
+            node.set_lat(
+                ((lat_offset + (i64::from(pbf_granularity) * lat)) / granularity as i64) as i32,
+            );
+            node.set_lon(
+                ((lon_offset + (i64::from(pbf_granularity) * lon)) / granularity as i64) as i32,
+            );
 
             if tags_offset < dense_nodes.keys_vals.len() {
                 node.set_tag_first_idx(tags.next_index());
@@ -255,10 +251,12 @@ fn resolve_ways(
     (result, stats)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn serialize_ways(
     block: &osmpbf::PrimitiveBlock,
     nodes_id_to_idx: &[Option<u64>],
     ways: &mut flatdata::ExternalVector<osmflat::Way>,
+    way_ids: &mut Option<flatdata::ExternalVector<osmflat::Id>>,
     ways_id_to_idx: &mut ids::IdTableBuilder,
     stringtable: &mut StringTable,
     tags: &mut TagSerializer,
@@ -273,7 +271,9 @@ fn serialize_ways(
             assert_eq!(index as usize, ways.len());
 
             let way = ways.grow()?;
-            way.set_id(pbf_way.id);
+            if let Some(ids) = way_ids {
+                ids.grow()?.set_value(pbf_way.id as u64);
+            }
 
             debug_assert_eq!(pbf_way.keys.len(), pbf_way.vals.len(), "invalid input data");
             way.set_tag_first_idx(tags.next_index());
@@ -327,6 +327,7 @@ fn serialize_relations(
     relations_id_to_idx: &ids::IdTable,
     stringtable: &mut StringTable,
     relations: &mut flatdata::ExternalVector<osmflat::Relation>,
+    relation_ids: &mut Option<flatdata::ExternalVector<osmflat::Id>>,
     relation_members: &mut flatdata::MultiVector<osmflat::RelationMembers>,
     tags: &mut TagSerializer,
 ) -> Result<Stats, Error> {
@@ -335,7 +336,9 @@ fn serialize_relations(
     for group in &block.primitivegroup {
         for pbf_relation in &group.relations {
             let relation = relations.grow()?;
-            relation.set_id(pbf_relation.id);
+            if let Some(ids) = relation_ids {
+                ids.grow()?.set_value(pbf_relation.id as u64);
+            }
 
             debug_assert_eq!(
                 pbf_relation.keys.len(),
@@ -397,8 +400,11 @@ fn serialize_relations(
     Ok(stats)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn serialize_dense_node_blocks(
     builder: &osmflat::OsmBuilder,
+    granularity: i32,
+    mut node_ids: Option<flatdata::ExternalVector<osmflat::Id>>,
     blocks: Vec<BlockIndex>,
     data: &[u8],
     tags: &mut TagSerializer,
@@ -415,8 +421,15 @@ fn serialize_dense_node_blocks(
         |idx| read_block(data, &idx),
         |block| -> Result<osmpbf::PrimitiveBlock, Error> {
             let block = block?;
-            *stats +=
-                serialize_dense_nodes(&block, &mut nodes, &mut nodes_id_to_idx, stringtable, tags)?;
+            *stats += serialize_dense_nodes(
+                &block,
+                granularity,
+                &mut nodes,
+                &mut node_ids,
+                &mut nodes_id_to_idx,
+                stringtable,
+                tags,
+            )?;
 
             pb.inc();
             Ok(block)
@@ -427,6 +440,9 @@ fn serialize_dense_node_blocks(
     // of the last node
     nodes.grow()?.set_tag_first_idx(tags.next_index());
     nodes.close()?;
+    if let Some(ids) = node_ids {
+        ids.close()?;
+    }
     info!("Dense nodes converted.");
     info!("Building dense nodes index...");
     let nodes_id_to_idx = nodes_id_to_idx.build();
@@ -436,8 +452,10 @@ fn serialize_dense_node_blocks(
 
 type PrimitiveBlockWithIds = (osmpbf::PrimitiveBlock, (Vec<Option<u64>>, Stats));
 
+#[allow(clippy::too_many_arguments)]
 fn serialize_way_blocks(
     builder: &osmflat::OsmBuilder,
+    mut way_ids: Option<flatdata::ExternalVector<osmflat::Id>>,
     blocks: Vec<BlockIndex>,
     data: &[u8],
     nodes_id_to_idx: &ids::IdTable,
@@ -464,6 +482,7 @@ fn serialize_way_blocks(
                 &block,
                 &ids,
                 &mut ways,
+                &mut way_ids,
                 &mut ways_id_to_idx,
                 stringtable,
                 tags,
@@ -481,6 +500,9 @@ fn serialize_way_blocks(
         sentinel.set_ref_first_idx(nodes_index.len() as u64);
     }
     ways.close()?;
+    if let Some(ids) = way_ids {
+        ids.close()?;
+    }
     nodes_index.close()?;
 
     info!("Ways converted.");
@@ -493,6 +515,7 @@ fn serialize_way_blocks(
 #[allow(clippy::too_many_arguments)]
 fn serialize_relation_blocks(
     builder: &osmflat::OsmBuilder,
+    mut relation_ids: Option<flatdata::ExternalVector<osmflat::Id>>,
     blocks: Vec<BlockIndex>,
     data: &[u8],
     nodes_id_to_idx: &ids::IdTable,
@@ -522,6 +545,7 @@ fn serialize_relation_blocks(
                 &relations_id_to_idx,
                 stringtable,
                 &mut relations,
+                &mut relation_ids,
                 &mut relation_members,
                 tags,
             )?;
@@ -536,6 +560,9 @@ fn serialize_relation_blocks(
     }
 
     relations.close()?;
+    if let Some(ids) = relation_ids {
+        ids.close()?;
+    }
     relation_members.close()?;
 
     info!("Relations converted.");
@@ -543,12 +570,21 @@ fn serialize_relation_blocks(
     Ok(())
 }
 
+fn gcd(a: i32, b: i32) -> i32 {
+    let (mut x, mut y) = (a.min(b), a.max(b));
+    while x > 1 {
+        y %= x;
+        std::mem::swap(&mut x, &mut y);
+    }
+    y
+}
+
 fn run(args: args::Args) -> Result<(), Error> {
     let input_file = File::open(&args.input)?;
     let input_data = unsafe { Mmap::map(&input_file)? };
 
     let storage = FileResourceStorage::new(args.output.clone());
-    let builder = osmflat::OsmBuilder::new(storage)?;
+    let builder = osmflat::OsmBuilder::new(storage.clone())?;
 
     // TODO: Would be nice not store all these strings in memory, but to flush them
     // from time to time to disk.
@@ -562,6 +598,21 @@ fn run(args: args::Args) -> Result<(), Error> {
 
     info!("Building index of PBF blocks...");
     let block_index = build_block_index(&input_data);
+    let mut greatest_common_granularity = 1000000000;
+    for block in &block_index {
+        if block.block_type == BlockType::DenseNodes {
+            // only DenseNodes have coordinate we need to scale
+            if let Some(block_granularity) = block.granularity {
+                greatest_common_granularity =
+                    gcd(greatest_common_granularity, block_granularity as i32);
+            }
+        }
+    }
+    let coord_scale = 1000000000 / greatest_common_granularity;
+    info!(
+        "Greatest common granularity: {}, Coordinate scaling factor: {}",
+        greatest_common_granularity, coord_scale
+    );
 
     // TODO: move out into a function
     let groups = block_index.into_iter().group_by(|b| b.block_type);
@@ -590,13 +641,26 @@ fn run(args: args::Args) -> Result<(), Error> {
     }
     let idx = &pbf_header[0];
     let pbf_header: osmpbf::HeaderBlock = read_block(&input_data, idx)?;
-    serialize_header(&pbf_header, &builder, &mut stringtable)?;
+    serialize_header(&pbf_header, coord_scale, &builder, &mut stringtable)?;
     info!("Header written.");
 
     let mut stats = Stats::default();
 
+    let ids_archive;
+    let mut node_ids = None;
+    let mut way_ids = None;
+    let mut relation_ids = None;
+    if args.ids {
+        ids_archive = builder.ids()?;
+        node_ids = Some(ids_archive.start_nodes()?);
+        way_ids = Some(ids_archive.start_ways()?);
+        relation_ids = Some(ids_archive.start_relations()?);
+    }
+
     let nodes_id_to_idx = serialize_dense_node_blocks(
         &builder,
+        greatest_common_granularity,
+        node_ids,
         pbf_dense_nodes,
         &input_data,
         &mut tags,
@@ -606,6 +670,7 @@ fn run(args: args::Args) -> Result<(), Error> {
 
     let ways_id_to_idx = serialize_way_blocks(
         &builder,
+        way_ids,
         pbf_ways,
         &input_data,
         &nodes_id_to_idx,
@@ -616,6 +681,7 @@ fn run(args: args::Args) -> Result<(), Error> {
 
     serialize_relation_blocks(
         &builder,
+        relation_ids,
         pbf_relations,
         &input_data,
         &nodes_id_to_idx,
@@ -632,6 +698,11 @@ fn run(args: args::Args) -> Result<(), Error> {
     builder.set_stringtable(&stringtable.into_bytes())?;
 
     info!("osmflat archive built.");
+
+    std::mem::drop(builder);
+    osmflat::Osm::open(storage)?;
+
+    info!("verified that osmflat archive can be opened.");
 
     println!("{}", stats);
     Ok(())

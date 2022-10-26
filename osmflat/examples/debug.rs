@@ -9,56 +9,36 @@
 //!
 //! The code in this example file is released into the Public Domain.
 
-use osmflat::{iter_tags, FileResourceStorage, Osm, RelationMembersRef, COORD_SCALE};
+use argh::FromArgs;
+use osmflat::{iter_tags, FileResourceStorage, Osm, RelationMembersRef};
 
-use std::fmt;
+use std::path::PathBuf;
 use std::str::{self, Utf8Error};
-
-/// Represents fixed point coordinates stored in OSM
-#[derive(Clone, Copy)]
-struct FixedI64(i64);
-
-impl FixedI64 {
-    fn value(self) -> f64 {
-        self.0 as f64 / COORD_SCALE as f64
-    }
-}
-
-impl fmt::Debug for FixedI64 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let value: f64 = self.value();
-        write!(f, "{}", value)
-    }
-}
 
 #[derive(Debug)]
 struct Header<'ar> {
     #[allow(unused)]
-    bbox: (FixedI64, FixedI64, FixedI64, FixedI64),
-    #[allow(unused)]
-    required_features: Vec<&'ar str>,
-    #[allow(unused)]
-    optional_features: Vec<&'ar str>,
+    bbox: (f64, f64, f64, f64),
     #[allow(unused)]
     writingprogram: &'ar str,
     #[allow(unused)]
     source: &'ar str,
     #[allow(unused)]
-    osmosis_replication_timestamp: i64,
+    replication_timestamp: i64,
     #[allow(unused)]
-    osmosis_replication_sequence_number: i64,
+    replication_sequence_number: i64,
     #[allow(unused)]
-    osmosis_replication_base_url: &'ar str,
+    replication_base_url: &'ar str,
 }
 
 #[derive(Debug)]
 struct Node<'ar> {
     #[allow(unused)]
-    id: i64,
+    id: Option<u64>,
     #[allow(unused)]
-    lat: FixedI64,
+    lat: f64,
     #[allow(unused)]
-    lon: FixedI64,
+    lon: f64,
     #[allow(unused)]
     tags: Vec<(&'ar str, &'ar str)>,
 }
@@ -66,7 +46,7 @@ struct Node<'ar> {
 #[derive(Debug)]
 struct Way<'ar> {
     #[allow(unused)]
-    id: i64,
+    id: Option<u64>,
     #[allow(unused)]
     tags: Vec<(&'ar str, &'ar str)>,
     #[allow(unused)]
@@ -76,7 +56,7 @@ struct Way<'ar> {
 #[derive(Debug)]
 struct Relation<'ar> {
     #[allow(unused)]
-    id: i64,
+    id: Option<u64>,
     #[allow(unused)]
     tags: Vec<(&'ar str, &'ar str)>,
     #[allow(unused)]
@@ -86,7 +66,7 @@ struct Relation<'ar> {
 #[derive(Debug)]
 struct Member<'ar> {
     #[allow(unused)]
-    type_: Type,
+    r#type: Type,
     #[allow(unused)]
     idx: Option<u64>,
     #[allow(unused)]
@@ -112,17 +92,17 @@ impl<'ar> Member<'ar> {
             .map(move |member| {
                 let res = match member {
                     RelationMembersRef::NodeMember(m) => Member {
-                        type_: Type::Node,
+                        r#type: Type::Node,
                         idx: m.node_idx(),
                         role: strings.substring(m.role_idx() as usize)?,
                     },
                     RelationMembersRef::WayMember(m) => Member {
-                        type_: Type::Way,
+                        r#type: Type::Way,
                         idx: m.way_idx(),
                         role: strings.substring(m.role_idx() as usize)?,
                     },
                     RelationMembersRef::RelationMember(m) => Member {
-                        type_: Type::Relation,
+                        r#type: Type::Relation,
                         idx: m.relation_idx(),
                         role: strings.substring(m.role_idx() as usize)?,
                     },
@@ -132,43 +112,42 @@ impl<'ar> Member<'ar> {
     }
 }
 
+/// output osmflatdata: nodes, ways, and/or relations
+#[derive(FromArgs, Debug)]
+struct Args {
+    /// input osmflat archive
+    #[argh(positional)]
+    input: PathBuf,
+    /// which types to print: (n)odes, (w)ays, or (r)elations
+    #[argh(option, default = "\"nwr\".to_string()")]
+    types: String,
+    /// amount of entities to print
+    #[argh(option)]
+    num: Option<usize>,
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut args = std::env::args().skip(1).take(2);
-    let archive_dir = args.next().ok_or(
-        "USAGE: debug <osmflat-archive> [TYPES] \
-         TYPES can be any combination of 'n', 'w', 'r' (default: 'nwr').",
-    )?;
-    let types = args.next().unwrap_or_else(|| "nrw".to_string());
-    let archive = Osm::open(FileResourceStorage::new(archive_dir))?;
+    let args: Args = argh::from_env();
+    let archive = Osm::open(FileResourceStorage::new(args.input))?;
 
     let header = archive.header();
     let strings = archive.stringtable();
 
-    let required_features: Result<Vec<_>, _> = (header.required_feature_first_idx() as usize..)
-        .take(header.required_features_size() as usize)
-        .map(|idx| strings.substring(idx))
-        .collect();
-    let optional_features: Result<Vec<_>, _> = (header.optional_feature_first_idx() as usize..)
-        .take(header.optional_features_size() as usize)
-        .map(|idx| strings.substring(idx))
-        .collect();
+    let scale_coord = |x| x as f64 / header.coord_scale() as f64;
 
     // print header
     let header = Header {
         bbox: (
-            FixedI64(header.bbox_left()),
-            FixedI64(header.bbox_right()),
-            FixedI64(header.bbox_top()),
-            FixedI64(header.bbox_bottom()),
+            scale_coord(header.bbox_left()),
+            scale_coord(header.bbox_right()),
+            scale_coord(header.bbox_top()),
+            scale_coord(header.bbox_bottom()),
         ),
-        required_features: required_features?,
-        optional_features: optional_features?,
         writingprogram: strings.substring(header.writingprogram_idx() as usize)?,
         source: strings.substring(header.source_idx() as usize)?,
-        osmosis_replication_timestamp: header.osmosis_replication_timestamp(),
-        osmosis_replication_sequence_number: header.osmosis_replication_sequence_number(),
-        osmosis_replication_base_url: strings
-            .substring(header.osmosis_replication_base_url_idx() as usize)?,
+        replication_timestamp: header.replication_timestamp(),
+        replication_sequence_number: header.replication_sequence_number(),
+        replication_base_url: strings.substring(header.replication_base_url_idx() as usize)?,
     };
     println!("{:#?}", header);
 
@@ -182,12 +161,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     // print nodes
-    if types.contains('n') {
-        for node in &archive.nodes()[..3] {
+    let mut node_ids = archive.ids().map(|x| x.nodes()).into_iter().flatten();
+    if args.types.contains('n') {
+        for node in archive.nodes().iter().take(args.num.unwrap_or(usize::MAX)) {
             let node = Node {
-                id: node.id(),
-                lat: FixedI64(node.lat()),
-                lon: FixedI64(node.lon()),
+                id: node_ids.next().map(|x| x.value()),
+                lat: scale_coord(node.lat()),
+                lon: scale_coord(node.lon()),
                 tags: collect_utf8_tags(node.tags()),
             };
 
@@ -197,10 +177,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // print ways
     let nodes_index = archive.nodes_index();
-    if types.contains('w') {
-        for way in archive.ways() {
+    let mut way_ids = archive.ids().map(|x| x.ways()).into_iter().flatten();
+    if args.types.contains('w') {
+        for way in archive.ways().iter().take(args.num.unwrap_or(usize::MAX)) {
             let way = Way {
-                id: way.id(),
+                id: way_ids.next().map(|x| x.value()),
                 tags: collect_utf8_tags(way.tags()),
                 nodes: way
                     .refs()
@@ -213,11 +194,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // print relations
-    if types.contains('r') {
-        for (relation_idx, relation) in archive.relations()[..3].iter().enumerate() {
+    let mut relation_ids = archive.ids().map(|x| x.ways()).into_iter().flatten();
+    if args.types.contains('r') {
+        for (relation_idx, relation) in archive.relations()[..3]
+            .iter()
+            .take(args.num.unwrap_or(usize::MAX))
+            .enumerate()
+        {
             let members: Result<Vec<_>, _> = Member::new_slice(&archive, relation_idx).collect();
             let relation = Relation {
-                id: relation.id(),
+                id: relation_ids.next().map(|x| x.value()),
                 tags: collect_utf8_tags(relation.tags()),
                 members: members?,
             };
