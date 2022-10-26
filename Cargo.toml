@@ -6,6 +6,3 @@ members = [
 
 [patch.crates-io]
 osmflat = { path = "osmflat" }
-
-[profile.release]
-debug = true
