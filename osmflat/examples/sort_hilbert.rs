@@ -2,6 +2,8 @@ use std::fs::OpenOptions;
 
 use osmflat::{FileResourceStorage, Osm, NodeHilbertIdx};
 use memmap2::MmapMut;
+use rayon::prelude::*;
+use std::time::{Duration, Instant};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let archive_dir = std::env::args()
@@ -61,8 +63,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Sort the index
     {
         println!("Sorting");
-        node_hilbert_index.sort_unstable_by_key(|idx| idx.h());
-        println!("Sorting done");
+        let now = Instant::now();
+        node_hilbert_index.par_sort_unstable_by_key(|idx| idx.h());
+        println!("Sorting done in {} secs.", now.elapsed().as_secs());
+        // Takes about 90 secs on MacBook Air M1 for all of the Nodes in California.
     }
 
     for idx in &archive.node_hilbert_index()[..30] {
