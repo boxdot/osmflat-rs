@@ -59,9 +59,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Sort the index
-    println!("Sorting...");
-    node_hilbert_index.sort_unstable_by_key(|idx| idx.h());
-    println!("Sorting done.");
+    {
+        println!("Sorting");
+        node_hilbert_index.sort_unstable_by_key(|idx| idx.h());
+        println!("Sorting done");
+    }
 
     for idx in &archive.node_hilbert_index()[..30] {
         println!("archive i {} h {}", idx.i(), idx.h());
