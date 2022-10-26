@@ -34,6 +34,7 @@ prost = "0.11.0"
 prost-derive = "0.11.0"
 prost-types = "0.11.1"
 rayon = "1.4.1"
+ahash = "0.8.0"
 
 [build-dependencies]
 prost-build = "0.11.1"

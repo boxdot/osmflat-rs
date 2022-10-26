@@ -4,7 +4,7 @@ use std::sync::{mpsc::sync_channel, Arc};
 
 use parking_lot::{Condvar, Mutex};
 
-pub fn parallel_process<Iter, Item, Producer, Data, Consumer, Error>(
+pub fn parallel_process<Iter, Item, Producer, Data, Consumer, Error, Garbage>(
     iter: Iter,
     produce: Producer,
     mut consume: Consumer,
@@ -13,7 +13,8 @@ where
     Iter: Iterator<Item = Item> + Send,
     Producer: Fn(Item) -> Data + Sync,
     Data: Send,
-    Consumer: FnMut(Data) -> Result<(), Error>,
+    Consumer: FnMut(Data) -> Result<Garbage, Error>,
+    Garbage: Send + 'static,
 {
     let num_threads = rayon::current_num_threads();
 
@@ -52,6 +53,16 @@ where
         }
         drop(sender); // drop to make sure iteration will finish once all senders are out of scope
 
+        let (garbage_sender, garbage_receiver) = sync_channel(2 * num_threads);
+
+        std::thread::spawn(move || {
+            // we move dropping of heavy objects to other threads as they can have a lot
+            // of allocations (e.g. Vec<String>)
+            for garbage in garbage_receiver {
+                std::mem::drop(garbage);
+            }
+        });
+
         let mut pending = BTreeMap::new();
         let mut next_idx = 0;
         for result in receiver {
@@ -64,7 +75,8 @@ where
                 }
 
                 next_idx += 1;
-                consume(data)?;
+                let garbage = consume(data)?;
+                garbage_sender.send(garbage).unwrap();
             }
         }
         Ok(())

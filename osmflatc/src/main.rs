@@ -17,7 +17,8 @@ use log::info;
 use memmap2::Mmap;
 use pbr::ProgressBar;
 
-use std::collections::{hash_map, HashMap};
+use ahash::AHashMap;
+use std::collections::hash_map;
 use std::fs::File;
 use std::io;
 use std::str;
@@ -79,7 +80,7 @@ fn serialize_header(
 struct TagSerializer<'a> {
     tags: flatdata::ExternalVector<'a, osmflat::Tag>,
     tags_index: flatdata::ExternalVector<'a, osmflat::TagIndex>,
-    dedup: HashMap<(u64, u64), u64>, // deduplication table: (key_idx, val_idx) -> pos
+    dedup: AHashMap<(u64, u64), u64>, // deduplication table: (key_idx, val_idx) -> pos
 }
 
 impl<'a> TagSerializer<'a> {
@@ -87,7 +88,7 @@ impl<'a> TagSerializer<'a> {
         Ok(Self {
             tags: builder.start_tags()?,
             tags_index: builder.start_tags_index()?,
-            dedup: HashMap::new(),
+            dedup: AHashMap::new(),
         })
     }
 
@@ -375,17 +376,13 @@ fn serialize_dense_node_blocks(
     parallel::parallel_process(
         blocks.into_iter(),
         |idx| read_block(data, &idx),
-        |block| -> Result<(), Error> {
-            *stats += serialize_dense_nodes(
-                &block?,
-                &mut nodes,
-                &mut nodes_id_to_idx,
-                stringtable,
-                tags,
-            )?;
+        |block| -> Result<osmpbf::PrimitiveBlock, Error> {
+            let block = block?;
+            *stats +=
+                serialize_dense_nodes(&block, &mut nodes, &mut nodes_id_to_idx, stringtable, tags)?;
 
             pb.inc();
-            Ok(())
+            Ok(block)
         },
     )?;
 
@@ -423,7 +420,7 @@ fn serialize_way_blocks(
             let ids = resolve_ways(&block, nodes_id_to_idx);
             Ok((block, ids))
         },
-        |block: io::Result<PrimitiveBlockWithIds>| -> Result<(), Error> {
+        |block: io::Result<PrimitiveBlockWithIds>| -> Result<osmpbf::PrimitiveBlock, Error> {
             let (block, (ids, stats_resolve)) = block?;
             *stats += stats_resolve;
             *stats += serialize_ways(
@@ -436,7 +433,8 @@ fn serialize_way_blocks(
                 &mut nodes_index,
             )?;
             pb.inc();
-            Ok(())
+
+            Ok(block)
         },
     )?;
 
@@ -478,9 +476,10 @@ fn serialize_relation_blocks(
     parallel::parallel_process(
         blocks.into_iter(),
         |idx| read_block(data, &idx),
-        |block| -> Result<(), Error> {
+        |block| -> Result<osmpbf::PrimitiveBlock, Error> {
+            let block = block?;
             *stats += serialize_relations(
-                &block?,
+                &block,
                 nodes_id_to_idx,
                 ways_id_to_idx,
                 &relations_id_to_idx,
@@ -490,7 +489,7 @@ fn serialize_relation_blocks(
                 tags,
             )?;
             pb.inc();
-            Ok(())
+            Ok(block)
         },
     )?;
 

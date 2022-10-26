@@ -1,9 +1,9 @@
+use ahash::AHashMap;
 use inlinable_string::{InlinableString, StringExt};
-use std::collections::HashMap;
 
 #[derive(Debug, Default)]
 pub struct StringTable {
-    indexed_data: HashMap<InlinableString, u64>,
+    indexed_data: AHashMap<InlinableString, u64>,
     size_in_bytes: u64,
 }
 
