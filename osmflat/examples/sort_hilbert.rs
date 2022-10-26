@@ -1,4 +1,4 @@
-use std::fs::OpenOptions;
+use std::{fs::OpenOptions, io::Read};
 
 use osmflat::{FileResourceStorage, Osm, NodeHilbertIdx};
 use memmap2::MmapMut;
@@ -25,6 +25,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let file = OpenOptions::new().read(true).write(true).create(true).open(path)?;
     // file.set_len((len * std::mem::size_of::<NodeHilbertIdx>() + 8) as u64)?;
     let mut mmap = unsafe { MmapMut::map_mut(&file)? };
+
+    // let mut in_memory = Vec::new();
+    // file.read_to_end(&mut in_memory)?;
 
     // There are 8 bytes of padding at the beginning.
     // Not sure what it is...
