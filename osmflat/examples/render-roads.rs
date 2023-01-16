@@ -4,9 +4,9 @@
 //!
 //! The code in this example file is released into the Public Domain.
 
-use osmflat::{find_tag_by, FileResourceStorage, Node, Osm, Way, COORD_SCALE};
+use osmflat::{find_tag_by, FileResourceStorage, Node, Osm, Way};
 
-use argh::FromArgs;
+use clap::Parser;
 use itertools::Itertools;
 
 use std::f64::consts::PI;
@@ -22,11 +22,11 @@ struct GeoCoord {
 }
 
 /// Convert osmflat Node into GeoCoord.
-impl From<&Node> for GeoCoord {
-    fn from(node: &Node) -> Self {
+impl GeoCoord {
+    fn from_node(node: &Node, coord_scale: i32) -> Self {
         Self {
-            lat: node.lat() as f64 / COORD_SCALE as f64,
-            lon: node.lon() as f64 / COORD_SCALE as f64,
+            lat: node.lat() as f64 / coord_scale as f64,
+            lon: node.lon() as f64 / coord_scale as f64,
         }
     }
 }
@@ -84,10 +84,15 @@ fn way_coords<'a>(archive: &'a Osm, way: &Way) -> Option<impl Iterator<Item = Ge
     let nodes = archive.nodes();
     let nodes_index = archive.nodes_index();
     let path = way.refs().map(move |i| &nodes_index[i as usize]);
+    let scale = archive.header().coord_scale();
     if path.clone().any(|node| node.value().is_none()) {
         None
     } else {
-        Some(path.map(move |node| (&nodes[node.value().unwrap() as usize]).into()))
+        Some(
+            path.map(move |node| {
+                GeoCoord::from_node(&nodes[node.value().unwrap() as usize], scale)
+            }),
+        )
     }
 }
 
@@ -179,22 +184,21 @@ fn render(archive: &Osm, width: u32) -> Image {
     image
 }
 
-/// renders roads as a PNG
-#[derive(FromArgs, Debug)]
+/// Renders roads as a PNG
+#[derive(Debug, Parser)]
 struct Args {
     /// input osmflat archive
-    #[argh(positional)]
     input: PathBuf,
     /// output PNG filename
-    #[argh(option, short = 'o')]
+    #[clap(long, short = 'o')]
     output: PathBuf,
     /// width of the image (height is derived from ratio)
-    #[argh(option, short = 'w', default = "4320")]
+    #[clap(long, short = 'w', default_value = "4320")]
     width: u32,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let args: Args = argh::from_env();
+    let args = Args::parse();
 
     let archive = Osm::open(FileResourceStorage::new(args.input))?;
 

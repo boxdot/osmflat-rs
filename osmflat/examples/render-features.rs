@@ -17,10 +17,8 @@
 //!
 //! The code in this example file is released into the Public Domain.
 
-use argh::FromArgs;
-use osmflat::{
-    iter_tags, FileResourceStorage, Node, Osm, Relation, RelationMembersRef, Way, COORD_SCALE,
-};
+use clap::Parser;
+use osmflat::{iter_tags, FileResourceStorage, Node, Osm, Relation, RelationMembersRef, Way};
 use smallvec::{smallvec, SmallVec};
 use svg::{
     node::{self, element},
@@ -58,11 +56,11 @@ impl GeoCoord {
 }
 
 /// Convert osmflat Node into GeoCoord.
-impl From<&Node> for GeoCoord {
-    fn from(node: &Node) -> Self {
+impl GeoCoord {
+    fn from_node(node: &Node, coord_scale: i32) -> Self {
         Self {
-            lat: node.lat() as f64 / COORD_SCALE as f64,
-            lon: node.lon() as f64 / COORD_SCALE as f64,
+            lat: node.lat() as f64 / coord_scale as f64,
+            lon: node.lon() as f64 / coord_scale as f64,
         }
     }
 }
@@ -86,12 +84,16 @@ impl Polyline {
         let nodes_index = archive.nodes_index();
         let nodes = archive.nodes();
         let mut indices = self.inner.iter().cloned().flatten();
+        let scale = archive.header().coord_scale();
         if indices.any(|idx| nodes_index[idx as usize].value().is_none()) {
             None
         } else {
             let indices = self.inner.into_iter().flatten();
             Some(indices.map(move |idx| {
-                (&nodes[nodes_index[idx as usize].value().unwrap() as usize]).into()
+                GeoCoord::from_node(
+                    &nodes[nodes_index[idx as usize].value().unwrap() as usize],
+                    scale,
+                )
             }))
         }
     }
@@ -349,28 +351,27 @@ where
 }
 
 /// render map features as a SVG
-#[derive(Debug, FromArgs)]
-#[argh(name = "render-features")]
+#[derive(Debug, Parser)]
+#[clap(name = "render-features")]
 struct Args {
     /// osmflat archive
-    #[argh(positional)]
     osmflat_archive: PathBuf,
 
     /// SVG filename to output
-    #[argh(option, short = 'o')]
+    #[clap(long, short = 'o')]
     output: PathBuf,
 
     /// width of the image
-    #[argh(option, short = 'w', default = "800")]
+    #[clap(long, short = 'w', default_value = "800")]
     width: u32,
 
     /// height of the image
-    #[argh(option, short = 'h', default = "600")]
+    #[clap(long, short = 'h', default_value = "600")]
     height: u32,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let args: Args = argh::from_env();
+    let args = Args::parse();
 
     let storage = FileResourceStorage::new(args.osmflat_archive);
     let archive = Osm::open(storage)?;
