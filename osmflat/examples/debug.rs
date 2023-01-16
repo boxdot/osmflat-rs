@@ -27,7 +27,7 @@ impl FixedI64 {
 impl fmt::Debug for FixedI64 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let value: f64 = self.value();
-        write!(f, "{}", value)
+        write!(f, "{value}")
     }
 }
 
@@ -108,7 +108,7 @@ impl<'ar> Member<'ar> {
         let strings = archive.stringtable();
         archive
             .relation_members()
-            .at(relation_idx as usize)
+            .at(relation_idx)
             .map(move |member| {
                 let res = match member {
                     RelationMembersRef::NodeMember(m) => Member {
@@ -170,7 +170,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         osmosis_replication_base_url: strings
             .substring(header.osmosis_replication_base_url_idx() as usize)?,
     };
-    println!("{:#?}", header);
+    println!("{header:#?}");
 
     let collect_utf8_tags = |tags| -> Vec<(&str, &str)> {
         iter_tags(&archive, tags)
@@ -191,7 +191,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 tags: collect_utf8_tags(node.tags()),
             };
 
-            println!("{:#?}", node);
+            println!("{node:#?}");
         }
     }
 
@@ -208,7 +208,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     .collect(),
             };
 
-            println!("{:#?}", way);
+            println!("{way:#?}");
         }
     }
 
@@ -222,7 +222,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 members: members?,
             };
 
-            println!("{:#?}", relation);
+            println!("{relation:#?}");
         }
     }
 

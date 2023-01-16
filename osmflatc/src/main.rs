@@ -597,7 +597,7 @@ fn run(args: args::Args) -> Result<(), Error> {
 
     info!("osmflat archive built.");
 
-    println!("{}", stats);
+    println!("{stats}");
     Ok(())
 }
 

@@ -23,7 +23,7 @@ impl IdBlock {
             IdBlock::Dense { offsets, includes } => {
                 let last_bits: u32 = includes[includes.len() - DENSE_LOOKUP_BLOCK_SIZE..]
                     .iter()
-                    .map(|x| x.count_ones() as u32)
+                    .map(|x| x.count_ones())
                     .sum();
                 *offsets.last().unwrap() + last_bits
             }
@@ -60,7 +60,7 @@ impl IdBlock {
                 offsets[block + 1] = includes
                     [block * DENSE_LOOKUP_BLOCK_SIZE..(block + 1) * DENSE_LOOKUP_BLOCK_SIZE]
                     .iter()
-                    .map(|x| x.count_ones() as u32)
+                    .map(|x| x.count_ones())
                     .sum();
             }
             for block in 0..offsets.len() - 1 {
@@ -82,7 +82,7 @@ impl IdBlock {
                     let rest = x as usize % (8 * DENSE_LOOKUP_BLOCK_SIZE);
                     let mut result = offsets[offset_pos];
                     for i in start_block..start_block + rest {
-                        result += ((includes[i as usize / 8] & (1 << (i % 8))) != 0) as u32;
+                        result += ((includes[i / 8] & (1 << (i % 8))) != 0) as u32;
                     }
                     Some(result)
                 }
