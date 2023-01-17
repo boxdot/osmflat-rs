@@ -704,7 +704,7 @@ fn run(args: args::Args) -> Result<(), Error> {
 
     info!("verified that osmflat archive can be opened.");
 
-    println!("{stats}");
+    println!("{}", stats);
     Ok(())
 }
 

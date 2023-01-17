@@ -225,7 +225,7 @@ pub fn build_block_index(pbf_data: &[u8]) -> Vec<BlockIndex> {
             match block {
                 Ok(b) => Some(b),
                 Err(e) => {
-                    eprintln!("Skipping block due to error: {e}");
+                    eprintln!("Skipping block due to error: {}", e);
                     None
                 }
             }
