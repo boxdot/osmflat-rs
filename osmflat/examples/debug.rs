@@ -88,7 +88,7 @@ impl<'ar> Member<'ar> {
         let strings = archive.stringtable();
         archive
             .relation_members()
-            .at(relation_idx as usize)
+            .at(relation_idx)
             .map(move |member| {
                 let res = match member {
                     RelationMembersRef::NodeMember(m) => Member {
