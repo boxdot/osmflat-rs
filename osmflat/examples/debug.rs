@@ -149,7 +149,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         replication_sequence_number: header.replication_sequence_number(),
         replication_base_url: strings.substring(header.replication_base_url_idx() as usize)?,
     };
-    println!("{:#?}", header);
+    println!("{header:#?}");
 
     let collect_utf8_tags = |tags| -> Vec<(&str, &str)> {
         iter_tags(&archive, tags)
@@ -171,7 +171,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 tags: collect_utf8_tags(node.tags()),
             };
 
-            println!("{:#?}", node);
+            println!("{node:#?}");
         }
     }
 
@@ -189,7 +189,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     .collect(),
             };
 
-            println!("{:#?}", way);
+            println!("{way:#?}");
         }
     }
 
@@ -208,7 +208,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 members: members?,
             };
 
-            println!("{:#?}", relation);
+            println!("{relation:#?}");
         }
     }
 

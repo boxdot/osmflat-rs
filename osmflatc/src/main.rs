@@ -86,7 +86,7 @@ impl I40 {
     }
 }
 
-#[allow(clippy::derive_hash_xor_eq)]
+#[allow(clippy::derived_hash_with_manual_eq)]
 impl std::hash::Hash for I40 {
     fn hash<H>(&self, h: &mut H)
     where
@@ -704,7 +704,7 @@ fn run(args: args::Args) -> Result<(), Error> {
 
     info!("verified that osmflat archive can be opened.");
 
-    println!("{}", stats);
+    println!("{stats}");
     Ok(())
 }
 
