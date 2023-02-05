@@ -10,12 +10,11 @@ use crate::stats::Stats;
 use crate::strings::StringTable;
 
 use clap::Parser;
-use colored::*;
 use flatdata::FileResourceStorage;
+use indicatif::{ProgressBar, ProgressStyle};
 use itertools::Itertools;
-use log::info;
+use log::{error, info};
 use memmap2::Mmap;
-use pbr::ProgressBar;
 
 use ahash::AHashMap;
 use std::collections::hash_map;
@@ -86,7 +85,7 @@ impl I40 {
     }
 }
 
-#[allow(clippy::derived_hash_with_manual_eq)]
+#[allow(clippy::derive_hash_xor_eq)]
 impl std::hash::Hash for I40 {
     fn hash<H>(&self, h: &mut H)
     where
@@ -300,8 +299,9 @@ where
     I: ExactSizeIterator<Item = BlockIndex> + Send + 'static,
 {
     let mut result = ids::IdTableBuilder::new();
-    let mut pb = ProgressBar::new(block_index.len() as u64);
-    pb.message("Building relations index...");
+    let pb = ProgressBar::new(block_index.len() as u64)
+        .with_style(pb_style())
+        .with_prefix("Building relations index");
     parallel::parallel_process(
         block_index,
         |idx| read_block(data, &idx),
@@ -311,10 +311,11 @@ where
                     result.insert(relation.id as u64);
                 }
             }
-            pb.inc();
+            pb.inc(1);
             Ok(())
         },
     )?;
+    pb.finish();
 
     Ok(result.build())
 }
@@ -413,9 +414,9 @@ fn serialize_dense_node_blocks(
 ) -> Result<ids::IdTable, Error> {
     let mut nodes_id_to_idx = ids::IdTableBuilder::new();
     let mut nodes = builder.start_nodes()?;
-    let mut pb = ProgressBar::new(blocks.len() as u64);
-    pb.message("Converting dense nodes...");
-
+    let pb = ProgressBar::new(blocks.len() as u64)
+        .with_style(pb_style())
+        .with_prefix("Converting dense nodes");
     parallel::parallel_process(
         blocks.into_iter(),
         |idx| read_block(data, &idx),
@@ -431,10 +432,11 @@ fn serialize_dense_node_blocks(
                 tags,
             )?;
 
-            pb.inc();
+            pb.inc(1);
             Ok(block)
         },
     )?;
+    pb.finish();
 
     // fill tag_first_idx of the sentry, since it contains the end of the tag range
     // of the last node
@@ -465,9 +467,10 @@ fn serialize_way_blocks(
 ) -> Result<ids::IdTable, Error> {
     let mut ways_id_to_idx = ids::IdTableBuilder::new();
     let mut ways = builder.start_ways()?;
-    let mut pb = ProgressBar::new(blocks.len() as u64);
+    let pb = ProgressBar::new(blocks.len() as u64)
+        .with_style(pb_style())
+        .with_prefix("Converting ways");
     let mut nodes_index = builder.start_nodes_index()?;
-    pb.message("Converting ways...");
     parallel::parallel_process(
         blocks.into_iter(),
         |idx| {
@@ -488,7 +491,7 @@ fn serialize_way_blocks(
                 tags,
                 &mut nodes_index,
             )?;
-            pb.inc();
+            pb.inc(1);
 
             Ok(block)
         },
@@ -505,6 +508,7 @@ fn serialize_way_blocks(
     }
     nodes_index.close()?;
 
+    pb.finish();
     info!("Ways converted.");
     info!("Building ways index...");
     let ways_id_to_idx = ways_id_to_idx.build();
@@ -531,8 +535,9 @@ fn serialize_relation_blocks(
     let mut relations = builder.start_relations()?;
     let mut relation_members = builder.start_relation_members()?;
 
-    let mut pb = ProgressBar::new(blocks.len() as u64);
-    pb.message("Converting relations...");
+    let pb = ProgressBar::new(blocks.len() as u64)
+        .with_style(pb_style())
+        .with_prefix("Converting relations");
     parallel::parallel_process(
         blocks.into_iter(),
         |idx| read_block(data, &idx),
@@ -549,7 +554,7 @@ fn serialize_relation_blocks(
                 &mut relation_members,
                 tags,
             )?;
-            pb.inc();
+            pb.inc(1);
             Ok(block)
         },
     )?;
@@ -565,6 +570,7 @@ fn serialize_relation_blocks(
     }
     relation_members.close()?;
 
+    pb.finish();
     info!("Relations converted.");
 
     Ok(())
@@ -708,6 +714,12 @@ fn run(args: args::Args) -> Result<(), Error> {
     Ok(())
 }
 
+fn pb_style() -> ProgressStyle {
+    ProgressStyle::with_template("{prefix:>24} [{bar:23}] {pos}/{len}: {per_sec} {elapsed}")
+        .unwrap()
+        .progress_chars("=> ")
+}
+
 fn main() {
     let args = args::Args::parse();
     let level = match args.verbose {
@@ -716,12 +728,13 @@ fn main() {
         _ => "trace",
     };
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or(level))
+        .format_target(false)
         .format_module_path(false)
         .format_timestamp_nanos()
         .init();
 
     if let Err(e) = run(args) {
-        eprintln!("{}: {}", "Error".red(), e);
+        error!("{e}");
         std::process::exit(1);
     }
 }
