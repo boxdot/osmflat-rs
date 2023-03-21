@@ -9,7 +9,7 @@
 //!
 //! The code in this example file is released into the Public Domain.
 
-use argh::FromArgs;
+use clap::Parser;
 use osmflat::{iter_tags, FileResourceStorage, Osm, RelationMembersRef};
 
 use std::path::PathBuf;
@@ -113,21 +113,20 @@ impl<'ar> Member<'ar> {
 }
 
 /// output osmflatdata: nodes, ways, and/or relations
-#[derive(FromArgs, Debug)]
+#[derive(Debug, Parser)]
 struct Args {
     /// input osmflat archive
-    #[argh(positional)]
     input: PathBuf,
     /// which types to print: (n)odes, (w)ays, or (r)elations
-    #[argh(option, default = "\"nwr\".to_string()")]
+    #[arg(long, default_value = "nwr")]
     types: String,
     /// amount of entities to print
-    #[argh(option)]
+    #[arg(long)]
     num: Option<usize>,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let args: Args = argh::from_env();
+    let args = Args::parse();
     let archive = Osm::open(FileResourceStorage::new(args.input))?;
 
     let header = archive.header();
@@ -149,7 +148,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         replication_sequence_number: header.replication_sequence_number(),
         replication_base_url: strings.substring(header.replication_base_url_idx() as usize)?,
     };
-    println!("{:#?}", header);
+    println!("{header:#?}");
 
     let collect_utf8_tags = |tags| -> Vec<(&str, &str)> {
         iter_tags(&archive, tags)
@@ -171,7 +170,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 tags: collect_utf8_tags(node.tags()),
             };
 
-            println!("{:#?}", node);
+            println!("{node:#?}");
         }
     }
 
@@ -189,7 +188,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     .collect(),
             };
 
-            println!("{:#?}", way);
+            println!("{way:#?}");
         }
     }
 
@@ -208,7 +207,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 members: members?,
             };
 
-            println!("{:#?}", relation);
+            println!("{relation:#?}");
         }
     }
 
