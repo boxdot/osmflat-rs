@@ -3,6 +3,7 @@ members = [
     "osmflat",
     "osmflatc",
 ]
+resolver = "1"
 
 [patch.crates-io]
 osmflat = { path = "osmflat" }

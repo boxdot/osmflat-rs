@@ -365,8 +365,8 @@ fn serialize_relations(
             for i in 0..pbf_relation.roles_sid.len() {
                 memid += pbf_relation.memids[i];
 
-                let member_type = osmpbf::relation::MemberType::from_i32(pbf_relation.types[i]);
-                debug_assert!(member_type.is_some());
+                let member_type = osmpbf::relation::MemberType::try_from(pbf_relation.types[i]);
+                debug_assert!(member_type.is_ok());
 
                 match member_type.unwrap() {
                     osmpbf::relation::MemberType::Node => {
