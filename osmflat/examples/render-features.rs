@@ -362,11 +362,11 @@ struct Args {
     output: PathBuf,
 
     /// width of the image
-    #[clap(long, short = 'w', default_value = "800")]
+    #[clap(long, default_value = "800")]
     width: u32,
 
     /// height of the image
-    #[clap(long, short = 'h', default_value = "600")]
+    #[clap(long, default_value = "600")]
     height: u32,
 }
 
