@@ -116,8 +116,7 @@ impl StringTable {
         } = self;
         std::mem::drop(indexed_data);
 
-        let mut result = Vec::new();
-        result.reserve(size_in_bytes as usize);
+        let mut result = Vec::with_capacity(size_in_bytes as usize);
         for buffer in data {
             result.extend(buffer); // also drops buffer
         }
