@@ -36,7 +36,7 @@ First, add this to your Cargo.toml:
 
 ```toml
 [dependencies]
-osmflat = "0.1.0"
+osmflat = "0.3.0"
 ```
 
 Now, you can open an osmflat archive as any other flatdata archive and read its

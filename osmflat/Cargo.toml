@@ -1,6 +1,6 @@
 [package]
 name = "osmflat"
-version = "0.2.0"
+version = "0.3.0"
 authors = [
     "boxdot <d@zerovolt.org>",
     "Christian Vetter <veaac.fdirct@gmail.com>",
@@ -12,19 +12,19 @@ repository = "https://github.com/boxdot/osmflat-rs"
 keywords = ["serialization", "osm", "openstreetmap", "flatdata"]
 categories = ["encoding"]
 readme = "README.md"
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 flatdata = "0.5.3"
 
 [dev-dependencies]
 clap = { version = "4.1.4", features = ["derive"] }
-itertools = "0.10.5"
+itertools = "0.12.0"
 png = "0.17.7"
 serde = { version = "1.0.152", features = ["derive"] }
 serde_json = "1.0.91"
 smallvec = "1.10.0"
-svg = "0.13.0"
+svg = "0.16.0"
 
 [features]
 default = []

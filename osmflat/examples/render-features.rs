@@ -20,10 +20,7 @@
 use clap::Parser;
 use osmflat::{iter_tags, FileResourceStorage, Node, Osm, Relation, RelationMembersRef, Way};
 use smallvec::{smallvec, SmallVec};
-use svg::{
-    node::{self, element},
-    Document,
-};
+use svg::{node::element, Document};
 
 use std::f64;
 use std::fmt::Write;
@@ -340,11 +337,10 @@ where
     "#,
     );
 
-    let notice = element::Text::new()
+    let notice = element::Text::new("© OpenStreetMap Contributors")
         .set("x", width.saturating_sub(10))
         .set("y", height.saturating_sub(10))
-        .set("text-anchor", "end")
-        .add(node::Text::new("© OpenStreetMap Contributors"));
+        .set("text-anchor", "end");
 
     document = document.add(style).add(transform).add(notice);
     svg::save(output, &document)
@@ -362,11 +358,11 @@ struct Args {
     output: PathBuf,
 
     /// width of the image
-    #[clap(long, short = 'w', default_value = "800")]
+    #[clap(long, default_value = "800")]
     width: u32,
 
     /// height of the image
-    #[clap(long, short = 'h', default_value = "600")]
+    #[clap(long, default_value = "600")]
     height: u32,
 }
 

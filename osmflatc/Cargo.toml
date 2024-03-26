@@ -1,6 +1,6 @@
 [package]
 name = "osmflatc"
-version = "0.2.0"
+version = "0.3.0"
 authors = [
     "boxdot <d@zerovolt.org>",
     "Christian Vetter <veaac.fdirct@gmail.com>",
@@ -12,30 +12,30 @@ repository = "https://github.com/boxdot/osmflat-rs"
 keywords = ["serialization", "osm", "openstreetmap", "flatdata"]
 categories = ["encoding"]
 readme = "README.md"
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 byteorder = "1.4.3"
 bytes = "1.4.0"
 clap = { version = "4.1.4", features = ["derive"] }
 crossbeam = "0.8.2"
-env_logger = "0.10.0"
+env_logger = "0.11.0"
 flatdata = "0.5.3"
 flate2 = "1.0.25"
-itertools = "0.10.5"
+itertools = "0.12.0"
 log = "0.4.17"
-memmap2 = "0.5.8"
-osmflat = "0.2.0"
+memmap2 = "0.9.0"
+osmflat = "0.3.0"
 parking_lot = "0.12.1"
-prost = "0.11.6"
-prost-derive = "0.11.6"
-prost-types = "0.11.6"
+prost = "0.12.3"
+prost-derive = "0.12.0"
+prost-types = "0.12.3"
 rayon = "1.6.1"
 ahash = "0.8.3"
 indicatif = "0.17.3"
 
 [build-dependencies]
-prost-build = "0.11.6"
+prost-build = "0.12.3"
 
 [dev-dependencies]
 proptest = "1.0.0"
