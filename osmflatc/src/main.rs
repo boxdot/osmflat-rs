@@ -621,7 +621,7 @@ fn run(args: args::Args) -> Result<(), Error> {
     );
 
     // TODO: move out into a function
-    let groups = block_index.into_iter().group_by(|b| b.block_type);
+    let groups = block_index.into_iter().chunk_by(|b| b.block_type);
     let mut pbf_header = Vec::new();
     let mut pbf_dense_nodes = Vec::new();
     let mut pbf_ways = Vec::new();
