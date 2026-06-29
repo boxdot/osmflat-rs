@@ -20,7 +20,8 @@ impl TerminatedStringPtr {
 
     fn as_bytes(&self) -> &[u8] {
         // Safety:
-        // If constructed properly from a 0-terminated string that outlives this instance this is safe
+        // If constructed properly from a 0-terminated string that outlives this
+        // instance this is safe
         unsafe { std::ffi::CStr::from_ptr(self.ptr as *const i8).to_bytes() }
     }
 }
@@ -61,6 +62,14 @@ pub struct StringTable {
     size_in_bytes: u64,
 }
 
+// Safety: a `StringTable` owns the byte buffers that its internal
+// `TerminatedStringPtr` keys point into (held in `data`), and those buffers are
+// never reallocated or freed while the table is alive (see `insert`). Moving
+// the whole table to another thread therefore keeps every pointer valid. It is
+// deliberately NOT `Sync`: concurrent mutation would race, so shared access
+// across threads must go through a `Mutex`.
+unsafe impl Send for StringTable {}
+
 impl StringTable {
     pub fn new() -> Self {
         Default::default()
@@ -96,7 +105,8 @@ impl StringTable {
         // Safety: We must never reallocate the buffer
         debug_assert_eq!(ptr_before, buffer.as_ptr());
         let key = unsafe {
-            // convert back to str (safe since we know that it is valid UTF, it was created from a str)
+            // convert back to str (safe since we know that it is valid UTF, it was created
+            // from a str)
             let key: &str = std::str::from_utf8_unchecked(&buffer[pos..]);
             // safe since we make sure to never reallocate/free any buffer
             let key_ptr = key.as_ptr();

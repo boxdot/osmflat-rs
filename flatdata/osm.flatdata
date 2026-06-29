@@ -173,9 +173,31 @@ struct Relation {
      */
     @range(tags)
     tag_first_idx: u64 : 40;
+    /**
+     * Minimum bounding box of the relation's members (min longitude scaled with `header.coord_scale`).
+     *
+     * Relations are stored ordered by a space-filling-curve index of this bounding box, so spatial
+     * queries do not need to re-resolve members.
+     */
+    min_lon: i32 : 32;
+    /// Bounding box of the relation's members (min latitude scaled with `header.coord_scale`).
+    min_lat: i32 : 32;
+    /// Bounding box of the relation's members (max longitude scaled with `header.coord_scale`).
+    max_lon: i32 : 32;
+    /// Bounding box of the relation's members (max latitude scaled with `header.coord_scale`).
+    max_lat: i32 : 32;
 }
 
 struct Id {
+    value: u64 : 40;
+}
+
+/**
+ * A permutation entry: an index into the parent archive's `nodes`, `ways`, or
+ * `relations` vector. Used to build an id-sorted *view* of those vectors for
+ * reverse (OSM id -> index) lookups without storing ids a second time.
+ */
+struct IdxRef {
     value: u64 : 40;
 }
 
@@ -200,6 +222,31 @@ archive Ids {
      * relations[i] has its id stored in ids.relations[i]
      */
     relations: vector< Id >;
+
+    /**
+     * Permutation of node indices ordered so that `nodes[nodes_by_id[k].value]`
+     * has ascending OSM id. Enables a binary-search reverse lookup (OSM id ->
+     * node index): binary search `k` comparing `nodes[nodes_by_id[k].value]`
+     * against the target id, indirecting through the `nodes` vector above.
+     * Optional: written only when reverse-id lookups are requested.
+     */
+    @optional
+    nodes_by_id: vector< IdxRef >;
+
+    /**
+     * Permutation of way indices ordered so that `ways[ways_by_id[k].value]`
+     * has ascending OSM id. See `nodes_by_id`.
+     */
+    @optional
+    ways_by_id: vector< IdxRef >;
+
+    /**
+     * Permutation of relation indices ordered so that
+     * `relations[relations_by_id[k].value]` has ascending OSM id.
+     * See `nodes_by_id`.
+     */
+    @optional
+    relations_by_id: vector< IdxRef >;
 }
 
 /**

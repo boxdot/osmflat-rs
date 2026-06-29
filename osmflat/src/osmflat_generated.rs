@@ -1282,22 +1282,22 @@ let value = value.unwrap_or(super::osm::INVALID_IDX);        flatdata_write_byte
 /// See <https://wiki.openstreetmap.org/wiki/Relation>.
 #[repr(transparent)]
 pub struct Relation {
-    data: [u8; 5],
+    data: [u8; 21],
 }
 
 impl Relation {
     /// Unsafe since the struct might not be self-contained
     pub unsafe fn new_unchecked( ) -> Self {
-        Self{data : [0; 5]}
+        Self{data : [0; 21]}
     }
 }
 
 impl flatdata::Struct for Relation {
     unsafe fn create_unchecked( ) -> Self {
-        Self{data : [0; 5]}
+        Self{data : [0; 21]}
     }
 
-    const SIZE_IN_BYTES: usize = 5;
+    const SIZE_IN_BYTES: usize = 21;
     const IS_OVERLAPPING_WITH_NEXT : bool = true;
 }
 
@@ -1319,8 +1319,39 @@ impl Relation {
     #[inline]
     pub fn tags(&self) -> std::ops::Range<u64> {
         let start = flatdata_read_bytes!(u64, self.data.as_ptr(), 0, 40);
-        let end = flatdata_read_bytes!(u64, self.data.as_ptr(), 0 + 5 * 8, 40);
+        let end = flatdata_read_bytes!(u64, self.data.as_ptr(), 0 + 21 * 8, 40);
         start..end
+    }
+
+    /// Minimum bounding box of the relation's members (min longitude scaled with `header.coord_scale`).
+///
+/// Relations are stored ordered by a space-filling-curve index of this bounding box, so spatial
+/// queries do not need to re-resolve members.
+    #[inline]
+    pub fn min_lon(&self) -> i32 {
+        let value = flatdata_read_bytes!(i32, self.data.as_ptr(), 40, 32);
+        unsafe { std::mem::transmute::<i32, i32>(value) }
+    }
+
+    /// Bounding box of the relation's members (min latitude scaled with `header.coord_scale`).
+    #[inline]
+    pub fn min_lat(&self) -> i32 {
+        let value = flatdata_read_bytes!(i32, self.data.as_ptr(), 72, 32);
+        unsafe { std::mem::transmute::<i32, i32>(value) }
+    }
+
+    /// Bounding box of the relation's members (max longitude scaled with `header.coord_scale`).
+    #[inline]
+    pub fn max_lon(&self) -> i32 {
+        let value = flatdata_read_bytes!(i32, self.data.as_ptr(), 104, 32);
+        unsafe { std::mem::transmute::<i32, i32>(value) }
+    }
+
+    /// Bounding box of the relation's members (max latitude scaled with `header.coord_scale`).
+    #[inline]
+    pub fn max_lat(&self) -> i32 {
+        let value = flatdata_read_bytes!(i32, self.data.as_ptr(), 136, 32);
+        unsafe { std::mem::transmute::<i32, i32>(value) }
     }
 
 }
@@ -1329,6 +1360,10 @@ impl std::fmt::Debug for Relation {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         f.debug_struct("Relation")
             .field("tag_first_idx", &self.tag_first_idx())
+            .field("min_lon", &self.min_lon())
+            .field("min_lat", &self.min_lat())
+            .field("max_lon", &self.max_lon())
+            .field("max_lat", &self.max_lat())
             .finish()
     }
 }
@@ -1336,7 +1371,7 @@ impl std::fmt::Debug for Relation {
 impl std::cmp::PartialEq for Relation {
     #[inline]
     fn eq(&self, other: &Self) -> bool {
-        self.tag_first_idx() == other.tag_first_idx()     }
+        self.tag_first_idx() == other.tag_first_idx() &&        self.min_lon() == other.min_lon() &&        self.min_lat() == other.min_lat() &&        self.max_lon() == other.max_lon() &&        self.max_lat() == other.max_lat()     }
 }
 
 impl Relation {
@@ -1349,11 +1384,46 @@ impl Relation {
         flatdata_write_bytes!(u64; value, self.data, 0, 40)
     }
 
+    /// Minimum bounding box of the relation's members (min longitude scaled with `header.coord_scale`).
+///
+/// Relations are stored ordered by a space-filling-curve index of this bounding box, so spatial
+/// queries do not need to re-resolve members.
+    #[inline]
+    #[allow(missing_docs)]
+    pub fn set_min_lon(&mut self, value: i32) {
+        flatdata_write_bytes!(i32; value, self.data, 40, 32)
+    }
+
+    /// Bounding box of the relation's members (min latitude scaled with `header.coord_scale`).
+    #[inline]
+    #[allow(missing_docs)]
+    pub fn set_min_lat(&mut self, value: i32) {
+        flatdata_write_bytes!(i32; value, self.data, 72, 32)
+    }
+
+    /// Bounding box of the relation's members (max longitude scaled with `header.coord_scale`).
+    #[inline]
+    #[allow(missing_docs)]
+    pub fn set_max_lon(&mut self, value: i32) {
+        flatdata_write_bytes!(i32; value, self.data, 104, 32)
+    }
+
+    /// Bounding box of the relation's members (max latitude scaled with `header.coord_scale`).
+    #[inline]
+    #[allow(missing_docs)]
+    pub fn set_max_lat(&mut self, value: i32) {
+        flatdata_write_bytes!(i32; value, self.data, 136, 32)
+    }
+
 
     /// Copies the data from `other` into this struct.
     #[inline]
     pub fn fill_from(&mut self, other: &Relation) {
         self.set_tag_first_idx(other.tag_first_idx());
+        self.set_min_lon(other.min_lon());
+        self.set_min_lat(other.min_lat());
+        self.set_max_lon(other.max_lon());
+        self.set_max_lat(other.max_lat());
     }
 }
 #[repr(transparent)]
@@ -1469,6 +1539,122 @@ impl Id {
         self.set_value(other.value());
     }
 }
+/// A permutation entry: an index into the parent archive's `nodes`, `ways`, or
+/// `relations` vector. Used to build an id-sorted *view* of those vectors for
+/// reverse (OSM id -> index) lookups without storing ids a second time.
+#[repr(transparent)]
+#[derive(Clone)]
+pub struct IdxRef {
+    data: [u8; 5],
+}
+
+impl IdxRef {
+    /// Unsafe since the struct might not be self-contained
+    pub unsafe fn new_unchecked( ) -> Self {
+        Self{data : [0; 5]}
+    }
+}
+
+impl flatdata::Struct for IdxRef {
+    unsafe fn create_unchecked( ) -> Self {
+        Self{data : [0; 5]}
+    }
+
+    const SIZE_IN_BYTES: usize = 5;
+    const IS_OVERLAPPING_WITH_NEXT : bool = false;
+}
+
+impl IdxRef {
+    pub fn new( ) -> Self {
+        Self{data : [0; 5]}
+    }
+
+    /// Create reference from byte array of matching size
+    pub fn from_bytes(data: &[u8; 5]) -> &Self {
+        // Safety: This is safe since IdxRef is repr(transparent)
+        unsafe{ std::mem::transmute( data ) }
+    }
+
+    /// Create reference from byte array of matching size
+    pub fn from_bytes_mut(data: &mut [u8; 5]) -> &mut Self {
+        // Safety: This is safe since IdxRef is repr(transparent)
+        unsafe{ std::mem::transmute( data ) }
+    }
+
+    /// Create reference from byte array
+    pub fn from_bytes_slice(data: &[u8]) -> Result<&Self, flatdata::ResourceStorageError> {
+        // We cannot rely on TryFrom here, since it does not yet support > 33 bytes
+        if data.len() < 5 {
+            assert_eq!(data.len(), 5);
+            return Err(flatdata::ResourceStorageError::UnexpectedDataSize);
+        }
+        let ptr = data.as_ptr() as *const [u8; 5];
+        // Safety: We checked length before
+        Ok(Self::from_bytes(unsafe { &*ptr }))
+    }
+
+    /// Create reference from byte array
+    pub fn from_bytes_slice_mut(data: &mut [u8]) -> Result<&mut Self, flatdata::ResourceStorageError> {
+        // We cannot rely on TryFrom here, since it does not yet support > 33 bytes
+        if data.len() < 5 {
+            assert_eq!(data.len(), 5);
+            return Err(flatdata::ResourceStorageError::UnexpectedDataSize);
+        }
+        let ptr = data.as_ptr() as *mut [u8; 5];
+        // Safety: We checked length before
+        Ok(Self::from_bytes_mut(unsafe { &mut *ptr }))
+    }
+
+    pub fn as_bytes(&self) -> &[u8; 5] {
+        &self.data
+    }
+}
+
+impl Default for IdxRef {
+    fn default( ) -> Self {
+        Self::new( )
+    }
+}
+
+unsafe impl flatdata::NoOverlap for IdxRef {}
+
+impl IdxRef {
+    #[inline]
+    pub fn value(&self) -> u64 {
+        let value = flatdata_read_bytes!(u64, self.data.as_ptr(), 0, 40);
+        unsafe { std::mem::transmute::<u64, u64>(value) }
+    }
+
+}
+
+impl std::fmt::Debug for IdxRef {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        f.debug_struct("IdxRef")
+            .field("value", &self.value())
+            .finish()
+    }
+}
+
+impl std::cmp::PartialEq for IdxRef {
+    #[inline]
+    fn eq(&self, other: &Self) -> bool {
+        self.value() == other.value()     }
+}
+
+impl IdxRef {
+    #[inline]
+    #[allow(missing_docs)]
+    pub fn set_value(&mut self, value: u64) {
+        flatdata_write_bytes!(u64; value, self.data, 0, 40)
+    }
+
+
+    /// Copies the data from `other` into this struct.
+    #[inline]
+    pub fn fill_from(&mut self, other: &IdxRef) {
+        self.set_value(other.value());
+    }
+}
 
 
 
@@ -1479,6 +1665,9 @@ pub struct Ids {
     nodes : &'static [super::osm::Id],
     ways : &'static [super::osm::Id],
     relations : &'static [super::osm::Id],
+    nodes_by_id : Option<&'static [super::osm::IdxRef]>,
+    ways_by_id : Option<&'static [super::osm::IdxRef]>,
+    relations_by_id : Option<&'static [super::osm::IdxRef]>,
 }
 
 impl Ids {
@@ -1507,6 +1696,31 @@ impl Ids {
         self.relations
     }
 
+    /// Permutation of node indices ordered so that `nodes[nodes_by_id[k].value]`
+/// has ascending OSM id. Enables a binary-search reverse lookup (OSM id ->
+/// node index): binary search `k` comparing `nodes[nodes_by_id[k].value]`
+/// against the target id, indirecting through the `nodes` vector above.
+/// Optional: written only when reverse-id lookups are requested.
+    #[inline]
+    pub fn nodes_by_id(&self) -> Option<&[super::osm::IdxRef]> {
+        self.nodes_by_id
+    }
+
+    /// Permutation of way indices ordered so that `ways[ways_by_id[k].value]`
+/// has ascending OSM id. See `nodes_by_id`.
+    #[inline]
+    pub fn ways_by_id(&self) -> Option<&[super::osm::IdxRef]> {
+        self.ways_by_id
+    }
+
+    /// Permutation of relation indices ordered so that
+/// `relations[relations_by_id[k].value]` has ascending OSM id.
+/// See `nodes_by_id`.
+    #[inline]
+    pub fn relations_by_id(&self) -> Option<&[super::osm::IdxRef]> {
+        self.relations_by_id
+    }
+
 }
 
 impl ::std::fmt::Debug for Ids {
@@ -1515,6 +1729,9 @@ impl ::std::fmt::Debug for Ids {
             .field("nodes", &self.nodes())
             .field("ways", &self.ways())
             .field("relations", &self.relations())
+            .field("nodes_by_id", &self.nodes_by_id())
+            .field("ways_by_id", &self.ways_by_id())
+            .field("relations_by_id", &self.relations_by_id())
             .finish()
     }
 }
@@ -1551,12 +1768,33 @@ impl Ids {
             let resource = extend(storage.read("relations", schema::ids::resources::RELATIONS));
             check("relations", |r| r.len(), max_size, resource.and_then(|x| <&[super::osm::Id]>::from_bytes(x)))?
         };
+        let nodes_by_id = {
+            use flatdata::check_optional_resource as check;
+            let max_size = None;
+            let resource = extend(storage.read("nodes_by_id", schema::ids::resources::NODES_BY_ID));
+            check("nodes_by_id", |r| r.len(), max_size, resource.and_then(|x| <&[super::osm::IdxRef]>::from_bytes(x)))?
+        };
+        let ways_by_id = {
+            use flatdata::check_optional_resource as check;
+            let max_size = None;
+            let resource = extend(storage.read("ways_by_id", schema::ids::resources::WAYS_BY_ID));
+            check("ways_by_id", |r| r.len(), max_size, resource.and_then(|x| <&[super::osm::IdxRef]>::from_bytes(x)))?
+        };
+        let relations_by_id = {
+            use flatdata::check_optional_resource as check;
+            let max_size = None;
+            let resource = extend(storage.read("relations_by_id", schema::ids::resources::RELATIONS_BY_ID));
+            check("relations_by_id", |r| r.len(), max_size, resource.and_then(|x| <&[super::osm::IdxRef]>::from_bytes(x)))?
+        };
 
         Ok(Self {
             _storage: storage,
             nodes,
             ways,
             relations,
+            nodes_by_id,
+            ways_by_id,
+            relations_by_id,
         })
     }
 }
@@ -1588,7 +1826,7 @@ impl IdsBuilder {
     /// [`nodes`]: struct.Ids.html#method.nodes
     /// [`ExternalVector::close`]: flatdata/struct.ExternalVector.html#method.close
     #[inline]
-    pub fn start_nodes(&self) -> ::std::io::Result<flatdata::ExternalVector<super::osm::Id>> {
+    pub fn start_nodes(&self) -> ::std::io::Result<flatdata::ExternalVector<'_, super::osm::Id>> {
         flatdata::create_external_vector(&*self.storage, "nodes", schema::ids::resources::NODES)
     }
 
@@ -1610,7 +1848,7 @@ impl IdsBuilder {
     /// [`ways`]: struct.Ids.html#method.ways
     /// [`ExternalVector::close`]: flatdata/struct.ExternalVector.html#method.close
     #[inline]
-    pub fn start_ways(&self) -> ::std::io::Result<flatdata::ExternalVector<super::osm::Id>> {
+    pub fn start_ways(&self) -> ::std::io::Result<flatdata::ExternalVector<'_, super::osm::Id>> {
         flatdata::create_external_vector(&*self.storage, "ways", schema::ids::resources::WAYS)
     }
 
@@ -1632,8 +1870,74 @@ impl IdsBuilder {
     /// [`relations`]: struct.Ids.html#method.relations
     /// [`ExternalVector::close`]: flatdata/struct.ExternalVector.html#method.close
     #[inline]
-    pub fn start_relations(&self) -> ::std::io::Result<flatdata::ExternalVector<super::osm::Id>> {
+    pub fn start_relations(&self) -> ::std::io::Result<flatdata::ExternalVector<'_, super::osm::Id>> {
         flatdata::create_external_vector(&*self.storage, "relations", schema::ids::resources::RELATIONS)
+    }
+
+    #[inline]
+    /// Stores [`nodes_by_id`] in the archive.
+    ///
+    /// [`nodes_by_id`]: struct.Ids.html#method.nodes_by_id
+    pub fn set_nodes_by_id(&self, vector: &[super::osm::IdxRef]) -> ::std::io::Result<()> {
+        use flatdata::SliceExt;
+        self.storage.write("nodes_by_id", schema::ids::resources::NODES_BY_ID, vector.as_bytes())
+    }
+
+    /// Opens [`nodes_by_id`] in the archive for buffered writing.
+    ///
+    /// Elements can be added to the vector until the [`ExternalVector::close`] method
+    /// is called. To flush the data fully into the archive, this method must be called
+    /// in the end.
+    ///
+    /// [`nodes_by_id`]: struct.Ids.html#method.nodes_by_id
+    /// [`ExternalVector::close`]: flatdata/struct.ExternalVector.html#method.close
+    #[inline]
+    pub fn start_nodes_by_id(&self) -> ::std::io::Result<flatdata::ExternalVector<'_, super::osm::IdxRef>> {
+        flatdata::create_external_vector(&*self.storage, "nodes_by_id", schema::ids::resources::NODES_BY_ID)
+    }
+
+    #[inline]
+    /// Stores [`ways_by_id`] in the archive.
+    ///
+    /// [`ways_by_id`]: struct.Ids.html#method.ways_by_id
+    pub fn set_ways_by_id(&self, vector: &[super::osm::IdxRef]) -> ::std::io::Result<()> {
+        use flatdata::SliceExt;
+        self.storage.write("ways_by_id", schema::ids::resources::WAYS_BY_ID, vector.as_bytes())
+    }
+
+    /// Opens [`ways_by_id`] in the archive for buffered writing.
+    ///
+    /// Elements can be added to the vector until the [`ExternalVector::close`] method
+    /// is called. To flush the data fully into the archive, this method must be called
+    /// in the end.
+    ///
+    /// [`ways_by_id`]: struct.Ids.html#method.ways_by_id
+    /// [`ExternalVector::close`]: flatdata/struct.ExternalVector.html#method.close
+    #[inline]
+    pub fn start_ways_by_id(&self) -> ::std::io::Result<flatdata::ExternalVector<'_, super::osm::IdxRef>> {
+        flatdata::create_external_vector(&*self.storage, "ways_by_id", schema::ids::resources::WAYS_BY_ID)
+    }
+
+    #[inline]
+    /// Stores [`relations_by_id`] in the archive.
+    ///
+    /// [`relations_by_id`]: struct.Ids.html#method.relations_by_id
+    pub fn set_relations_by_id(&self, vector: &[super::osm::IdxRef]) -> ::std::io::Result<()> {
+        use flatdata::SliceExt;
+        self.storage.write("relations_by_id", schema::ids::resources::RELATIONS_BY_ID, vector.as_bytes())
+    }
+
+    /// Opens [`relations_by_id`] in the archive for buffered writing.
+    ///
+    /// Elements can be added to the vector until the [`ExternalVector::close`] method
+    /// is called. To flush the data fully into the archive, this method must be called
+    /// in the end.
+    ///
+    /// [`relations_by_id`]: struct.Ids.html#method.relations_by_id
+    /// [`ExternalVector::close`]: flatdata/struct.ExternalVector.html#method.close
+    #[inline]
+    pub fn start_relations_by_id(&self) -> ::std::io::Result<flatdata::ExternalVector<'_, super::osm::IdxRef>> {
+        flatdata::create_external_vector(&*self.storage, "relations_by_id", schema::ids::resources::RELATIONS_BY_ID)
     }
 
 }
@@ -1868,7 +2172,7 @@ impl Osm {
 /// * a way member references a way in the `ways` vector,
 /// * a relation member references a relation in the `relations` vector.
     #[inline]
-    pub fn relation_members(&self) -> &flatdata::MultiArrayView<RelationMembers> {
+    pub fn relation_members(&self) -> &flatdata::MultiArrayView<'_, RelationMembers> {
         &self.relation_members
     }
 
@@ -1895,7 +2199,7 @@ impl Osm {
 
     /// List of strings separated by `\0`.
     #[inline]
-    pub fn stringtable(&self) -> flatdata::RawData {
+    pub fn stringtable(&self) -> flatdata::RawData<'_> {
         self.stringtable
     }
 
@@ -2066,7 +2370,7 @@ impl OsmBuilder {
     /// [`nodes`]: struct.Osm.html#method.nodes
     /// [`ExternalVector::close`]: flatdata/struct.ExternalVector.html#method.close
     #[inline]
-    pub fn start_nodes(&self) -> ::std::io::Result<flatdata::ExternalVector<super::osm::Node>> {
+    pub fn start_nodes(&self) -> ::std::io::Result<flatdata::ExternalVector<'_, super::osm::Node>> {
         flatdata::create_external_vector(&*self.storage, "nodes", schema::osm::resources::NODES)
     }
 
@@ -2088,7 +2392,7 @@ impl OsmBuilder {
     /// [`ways`]: struct.Osm.html#method.ways
     /// [`ExternalVector::close`]: flatdata/struct.ExternalVector.html#method.close
     #[inline]
-    pub fn start_ways(&self) -> ::std::io::Result<flatdata::ExternalVector<super::osm::Way>> {
+    pub fn start_ways(&self) -> ::std::io::Result<flatdata::ExternalVector<'_, super::osm::Way>> {
         flatdata::create_external_vector(&*self.storage, "ways", schema::osm::resources::WAYS)
     }
 
@@ -2110,7 +2414,7 @@ impl OsmBuilder {
     /// [`relations`]: struct.Osm.html#method.relations
     /// [`ExternalVector::close`]: flatdata/struct.ExternalVector.html#method.close
     #[inline]
-    pub fn start_relations(&self) -> ::std::io::Result<flatdata::ExternalVector<super::osm::Relation>> {
+    pub fn start_relations(&self) -> ::std::io::Result<flatdata::ExternalVector<'_, super::osm::Relation>> {
         flatdata::create_external_vector(&*self.storage, "relations", schema::osm::resources::RELATIONS)
     }
 
@@ -2123,7 +2427,7 @@ impl OsmBuilder {
     /// [`relation_members`]: struct.Osm.html#method.relation_members
     /// [`MultiVector::close`]: flatdata/struct.MultiVector.html#method.close
     #[inline]
-    pub fn start_relation_members(&self) -> ::std::io::Result<flatdata::MultiVector<RelationMembers>> {
+    pub fn start_relation_members(&self) -> ::std::io::Result<flatdata::MultiVector<'_, RelationMembers>> {
         flatdata::create_multi_vector(&*self.storage, "relation_members", schema::osm::resources::RELATION_MEMBERS)
     }
 
@@ -2145,7 +2449,7 @@ impl OsmBuilder {
     /// [`tags`]: struct.Osm.html#method.tags
     /// [`ExternalVector::close`]: flatdata/struct.ExternalVector.html#method.close
     #[inline]
-    pub fn start_tags(&self) -> ::std::io::Result<flatdata::ExternalVector<super::osm::Tag>> {
+    pub fn start_tags(&self) -> ::std::io::Result<flatdata::ExternalVector<'_, super::osm::Tag>> {
         flatdata::create_external_vector(&*self.storage, "tags", schema::osm::resources::TAGS)
     }
 
@@ -2167,7 +2471,7 @@ impl OsmBuilder {
     /// [`tags_index`]: struct.Osm.html#method.tags_index
     /// [`ExternalVector::close`]: flatdata/struct.ExternalVector.html#method.close
     #[inline]
-    pub fn start_tags_index(&self) -> ::std::io::Result<flatdata::ExternalVector<super::osm::TagIndex>> {
+    pub fn start_tags_index(&self) -> ::std::io::Result<flatdata::ExternalVector<'_, super::osm::TagIndex>> {
         flatdata::create_external_vector(&*self.storage, "tags_index", schema::osm::resources::TAGS_INDEX)
     }
 
@@ -2189,7 +2493,7 @@ impl OsmBuilder {
     /// [`nodes_index`]: struct.Osm.html#method.nodes_index
     /// [`ExternalVector::close`]: flatdata/struct.ExternalVector.html#method.close
     #[inline]
-    pub fn start_nodes_index(&self) -> ::std::io::Result<flatdata::ExternalVector<super::osm::NodeIndex>> {
+    pub fn start_nodes_index(&self) -> ::std::io::Result<flatdata::ExternalVector<'_, super::osm::NodeIndex>> {
         flatdata::create_external_vector(&*self.storage, "nodes_index", schema::osm::resources::NODES_INDEX)
     }
 
@@ -2234,11 +2538,24 @@ struct Id
 }
 
 namespace osm {
+struct IdxRef
+{
+    value : u64 : 40;
+}
+}
+
+namespace osm {
 archive Ids
 {
     nodes : vector< .osm.Id >;
     ways : vector< .osm.Id >;
     relations : vector< .osm.Id >;
+    @optional
+    nodes_by_id : vector< .osm.IdxRef >;
+    @optional
+    ways_by_id : vector< .osm.IdxRef >;
+    @optional
+    relations_by_id : vector< .osm.IdxRef >;
 }
 }
 
@@ -2290,6 +2607,54 @@ archive Ids
 }
 
 "#;
+pub const NODES_BY_ID: &str = r#"namespace osm {
+struct IdxRef
+{
+    value : u64 : 40;
+}
+}
+
+namespace osm {
+archive Ids
+{
+    @optional
+    nodes_by_id : vector< .osm.IdxRef >;
+}
+}
+
+"#;
+pub const WAYS_BY_ID: &str = r#"namespace osm {
+struct IdxRef
+{
+    value : u64 : 40;
+}
+}
+
+namespace osm {
+archive Ids
+{
+    @optional
+    ways_by_id : vector< .osm.IdxRef >;
+}
+}
+
+"#;
+pub const RELATIONS_BY_ID: &str = r#"namespace osm {
+struct IdxRef
+{
+    value : u64 : 40;
+}
+}
+
+namespace osm {
+archive Ids
+{
+    @optional
+    relations_by_id : vector< .osm.IdxRef >;
+}
+}
+
+"#;
 }
 }
 pub mod osm {
@@ -2335,6 +2700,10 @@ struct Relation
 {
     @range( tags )
     tag_first_idx : u64 : 40;
+    min_lon : i32 : 32;
+    min_lat : i32 : 32;
+    max_lon : i32 : 32;
+    max_lat : i32 : 32;
 }
 }
 
@@ -2400,11 +2769,24 @@ struct Id
 }
 
 namespace osm {
+struct IdxRef
+{
+    value : u64 : 40;
+}
+}
+
+namespace osm {
 archive Ids
 {
     nodes : vector< .osm.Id >;
     ways : vector< .osm.Id >;
     relations : vector< .osm.Id >;
+    @optional
+    nodes_by_id : vector< .osm.IdxRef >;
+    @optional
+    ways_by_id : vector< .osm.IdxRef >;
+    @optional
+    relations_by_id : vector< .osm.IdxRef >;
 }
 }
 
@@ -2517,6 +2899,10 @@ struct Relation
 {
     @range( tags )
     tag_first_idx : u64 : 40;
+    min_lon : i32 : 32;
+    min_lat : i32 : 32;
+    max_lon : i32 : 32;
+    max_lat : i32 : 32;
 }
 }
 
@@ -2645,11 +3031,24 @@ struct Id
 }
 
 namespace osm {
+struct IdxRef
+{
+    value : u64 : 40;
+}
+}
+
+namespace osm {
 archive Ids
 {
     nodes : vector< .osm.Id >;
     ways : vector< .osm.Id >;
     relations : vector< .osm.Id >;
+    @optional
+    nodes_by_id : vector< .osm.IdxRef >;
+    @optional
+    ways_by_id : vector< .osm.IdxRef >;
+    @optional
+    relations_by_id : vector< .osm.IdxRef >;
 }
 }
 
